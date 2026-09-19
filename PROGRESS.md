@@ -2,7 +2,19 @@
 
 Updated 2026-09-18. Current milestone: complete WebGL vertical slice and itch.io release candidate.
 
-## Current playable state
+## 2026-09-19 combo and interface update
+
+- Left Mouse now chains three distinct cuts with a heavier, wider finisher; the three circles show combo progress.
+- Health is a separate bottom bar. Enemy posture was removed; only a locked enemy's health appears at the upper right, and E finishes a nearby enemy at 35% health or less.
+- The spell wheel is dark, with a red hovered segment and click-only selection.
+
+## Earlier 2026-09-19 interface and rules update
+
+- The player now has one resource: Health. Mastery, Golden Silence and guard resolve were removed. Held guard takes a small amount of health damage; perfect deflection still avoids the hit.
+- `F` throws an ink dart on a short cooldown. Six simple health/throwable spells replace the old eight upgrades, selected from a white three-part spell wheel.
+- The HUD uses Jiayou Akira, ten ivory health pips and a red bar with a delayed damage trail. The supplied font is non-commercial; see `ATTRIBUTIONS.md`.
+
+## Previous playable state (2026-09-18)
 
 - Unity 6000.2.14f1, URP 17.2.0, main scene `Assets/Scenes/SumiShrine.unity`.
 - Complete arena run: introduction, two enemy waves, a randomized three-of-eight upgrade choice after each wave, Painted Oni boss, victory/death, pause and immediate restart.

@@ -8,17 +8,15 @@ namespace Sumi
     public enum SumiRunState { Intro,WaveOne,UpgradeOne,WaveTwo,UpgradeTwo,BossIntro,Boss,Victory,Death,Paused }
     public enum SumiEnemyKind { Retainer,Shade,Oni }
 
-    // One owner for hit stop, menus and Golden Silence prevents a late coroutine from
-    // accidentally unpausing the game.
+    // One owner for hit stop and menus prevents a late effect from unpausing the game.
     public static class SumiTime
     {
-        static float hitUntil,goldenUntil;static bool menu;
-        public static bool Golden=>Time.unscaledTime<goldenUntil;
+        static float hitUntil;static bool menu;
+        public static bool MenuPaused=>menu;
         public static void HitStop(float seconds){hitUntil=Mathf.Max(hitUntil,Time.unscaledTime+seconds);}
-        public static void GoldenSilence(float seconds){goldenUntil=Mathf.Max(goldenUntil,Time.unscaledTime+seconds);}
         public static void Menu(bool value){menu=value;Tick();}
-        public static void Tick(){Time.timeScale=menu?0:Time.unscaledTime<hitUntil?0:Golden?.46f:1;}
-        public static void Reset(){hitUntil=goldenUntil=0;menu=false;Time.timeScale=1;}
+        public static void Tick(){Time.timeScale=menu||Time.unscaledTime<hitUntil?0:1;}
+        public static void Reset(){hitUntil=0;menu=false;Time.timeScale=1;}
     }
 
     public sealed class SumiRunDirector:MonoBehaviour
@@ -26,17 +24,18 @@ namespace Sumi
         public SumiRunState state=SumiRunState.Intro;public SumiPlayer player;
         public bool CombatActive=>state==SumiRunState.WaveOne||state==SumiRunState.WaveTwo||state==SumiRunState.Boss;
         public bool Paused=>state==SumiRunState.Paused;
-        public float redPulse,waveGold;public string banner="THE PAINTED COURT";
+        public float redPulse;public string banner="THE PAINTED COURT";
         readonly List<SumiEnemy> enemies=new List<SumiEnemy>();readonly List<int> offered=new List<int>();readonly HashSet<int> chosen=new HashSet<int>();
-        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate;int spawned;GUIStyle title,small,card,center;Renderer[] playerRenderers;SumiGoldSurface[] goldSurfaces;MaterialPropertyBlock colorBlock;
+        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned;GUIStyle title,small,hud,card,center,wheelName,wheelNote;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture;Texture2D[] wheelSegments;
         static readonly Vector3[] Gates={new Vector3(0,0,17.5f),new Vector3(17.5f,0,0),new Vector3(0,0,-17.5f),new Vector3(-17.5f,0,0)};
-        static readonly string[] UpgradeNames={"GILDED EDGE","THIRD BELL","RED REVERSAL","BRUSH STEP","UNBROKEN LINE","QUIET MOON","FALLING PETAL","INK GUARD"};
-        static readonly string[] UpgradeText={"Perfect deflection empowers the next shoulder cut.","Every third perfect deflection restores 12 health.","Critical-health deflections shatter extra posture.","Brush Flash leaves a decoy and gains a longer invulnerable beat.","A shoulder cut releases a narrow ink wave.","Golden Silence restores 18 health.","Execution slows nearby devils.","The first wound in every wave is absorbed by mastery."};
+        static readonly string[] UpgradeNames={"RED THREAD","SECOND BREATH","STEADY HEART","SPLIT INK","DEEP INK","QUICK INK"};
+        static readonly string[] UpgradeText={"+25 max health","Executions heal 10","Take 20% less damage","Throw two darts","Darts hit harder","Throw more often"};
 
-        public void Init(SumiPlayer p){player=p;stateAt=Time.unscaledTime;bannerUntil=stateAt+2.8f;SumiTime.Reset();playerRenderers=p.GetComponentsInChildren<Renderer>(true);goldSurfaces=FindObjectsByType<SumiGoldSurface>(FindObjectsSortMode.None);colorBlock=new MaterialPropertyBlock();}
+        public void Init(SumiPlayer p){player=p;stateAt=Time.unscaledTime;bannerUntil=stateAt+2.8f;SumiTime.Reset();playerRenderers=p.GetComponentsInChildren<Renderer>(true);colorBlock=new MaterialPropertyBlock();}
         void Update()
         {
-            SumiTime.Tick();redPulse=Mathf.MoveTowards(redPulse,0,Time.unscaledDeltaTime*1.8f);waveGold=Mathf.MoveTowards(waveGold,0,Time.unscaledDeltaTime*.34f);
+            SumiTime.Tick();redPulse=Mathf.MoveTowards(redPulse,0,Time.unscaledDeltaTime*1.8f);
+            if(player&&player.combat!=null){float target=Mathf.Clamp01(player.combat.health/player.combat.maxHealth);float dt=Time.unscaledDeltaTime;if(target<lastHealth-.001f)trailDelay=Time.unscaledTime+.27f;lastHealth=target;if(target<shownHealth)shownHealth=Mathf.SmoothDamp(shownHealth,target,ref healthVelocity,.17f,Mathf.Infinity,dt);else shownHealth=Mathf.MoveTowards(shownHealth,target,dt*.75f);if(trailHealth<target)trailHealth=Mathf.MoveTowards(trailHealth,target,dt*.75f);else if(Time.unscaledTime>trailDelay)trailHealth=Mathf.SmoothDamp(trailHealth,target,ref trailVelocity,.56f,Mathf.Infinity,dt);}
             if(Time.unscaledTime>=nextColorUpdate){nextColorUpdate=Time.unscaledTime+.05f;ApplyColor();}
             var k=Keyboard.current;
             if((state==SumiRunState.Death||state==SumiRunState.Victory)&&k!=null&&k.rKey.wasPressedThisFrame){Restart();return;}
@@ -53,26 +52,24 @@ namespace Sumi
                     else EnterEnd(true);
                 }
             }
-            if((state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo)&&k!=null)
-            {if(k.digit1Key.wasPressedThisFrame)Choose(0);if(k.digit2Key.wasPressedThisFrame)Choose(1);if(k.digit3Key.wasPressedThisFrame)Choose(2);}
             if(state==SumiRunState.BossIntro&&Time.unscaledTime-stateAt>1.8f)BeginBoss();
         }
 
         void BeginWave(int wave)
         {
-            state=wave==1?SumiRunState.WaveOne:SumiRunState.WaveTwo;spawned=0;attacker=null;player.controllable=true;player.combat.BeginWave();
+            state=wave==1?SumiRunState.WaveOne:SumiRunState.WaveTwo;spawned=0;attacker=null;player.controllable=true;
             Banner(wave==1?"FIRST INK — THE RETAINERS":"SECOND INK — FOUR DIRECTIONS",2.1f);
             if(wave==1){Spawn(SumiEnemyKind.Retainer,0);Spawn(SumiEnemyKind.Retainer,2);}
             else {Spawn(SumiEnemyKind.Shade,1);Spawn(SumiEnemyKind.Retainer,2);Spawn(SumiEnemyKind.Retainer,3);nextArrowAt=Time.time+5.2f;}
         }
-        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;player.controllable=true;player.combat.BeginWave();Spawn(SumiEnemyKind.Oni,0);nextArrowAt=Time.time+8;Banner("THE PAINTED ONI",2.3f);}
+        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;player.controllable=true;Spawn(SumiEnemyKind.Oni,0);nextArrowAt=Time.time+8;Banner("THE PAINTED ONI",2.3f);}
         void Spawn(SumiEnemyKind kind,int gate)
         {
             var go=new GameObject(kind==SumiEnemyKind.Oni?"Painted Oni":kind==SumiEnemyKind.Shade?"Ink Shade":"Ashen Retainer");go.transform.position=Gates[gate%4]+Vector3.up*.02f;
             var e=go.AddComponent<SumiEnemy>();e.Init(player,kind,this);enemies.Add(e);spawned++;
         }
         int AliveCount(){int n=0;foreach(var e in enemies)if(e&&!e.dead)n++;return n;}
-        public bool RequestAttack(SumiEnemy enemy){if(!CombatActive||SumiTime.Golden)return false;if(attacker&&attacker!=enemy&&!attacker.dead)return false;attacker=enemy;return true;}
+        public bool RequestAttack(SumiEnemy enemy){if(!CombatActive)return false;if(attacker&&attacker!=enemy&&!attacker.dead)return false;attacker=enemy;return true;}
         public void ReleaseAttack(SumiEnemy enemy){if(attacker==enemy)attacker=null;}
         public int OrbitIndex(SumiEnemy e){int i=enemies.IndexOf(e);return i<0?0:i;}
         public void EnemyDied(SumiEnemy enemy){ReleaseAttack(enemy);}
@@ -81,31 +78,36 @@ namespace Sumi
         void OpenUpgrade(bool second)
         {
             state=second?SumiRunState.UpgradeTwo:SumiRunState.UpgradeOne;player.controllable=false;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
-            offered.Clear();while(offered.Count<3){int n=Random.Range(0,UpgradeNames.Length);if(!chosen.Contains(n)&&!offered.Contains(n))offered.Add(n);}Banner("CHOOSE A BRUSH VOW",99);
-            player.combat.AddMastery(14);waveGold=1;
+            offered.Clear();FillOffers();Banner("CHOOSE A SPELL",99);
+            player.combat.health=Mathf.Min(player.combat.maxHealth,player.combat.health+12);
         }
         void Choose(int slot)
         {
-            if(slot<0||slot>=offered.Count)return;int id=offered[slot];chosen.Add(id);player.combat.ApplyUpgrade(id);SumiTime.Menu(false);Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+            FillOffers();if(slot<0||slot>=offered.Count)return;int id=offered[slot];chosen.Add(id);player.combat.ApplyUpgrade(id);SumiTime.Menu(false);Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
             if(state==SumiRunState.UpgradeOne)BeginWave(2);else {state=SumiRunState.BossIntro;stateAt=Time.unscaledTime;player.controllable=false;Banner("A BELL BENEATH THE PAPER",1.8f);}
         }
         void EnterEnd(bool victory)
         {
             state=victory?SumiRunState.Victory:SumiRunState.Death;stateAt=Time.unscaledTime;player.controllable=false;attacker=null;SumiTime.Reset();
             foreach(var e in enemies)if(e)e.enabled=false;Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
-            Banner(victory?"THE NIGHT REMEMBERS":"THE INK TAKES YOU",99);if(victory){waveGold=1;player.combat.AddMastery(100);}else redPulse=1;
+            Banner(victory?"THE NIGHT REMEMBERS":"THE INK TAKES YOU",99);if(!victory)redPulse=1;
         }
         public void PlayerDamaged(){redPulse=1;if(player.combat.health<=0)EnterEnd(false);}
         void ApplyColor()
         {
-            if(!player||player.combat==null)return;float gold=player.combat.mastery/100f,red=Mathf.Max(redPulse,Mathf.Clamp01((45-player.combat.health)/45f));
-            foreach(var r in playerRenderers){if(!r)continue;r.GetPropertyBlock(colorBlock);colorBlock.SetFloat("_Gold",gold);colorBlock.SetFloat("_Red",red);r.SetPropertyBlock(colorBlock);}
-            foreach(var s in goldSurfaces)if(s)s.SetMastery(player.combat.mastery);
+            if(!player||player.combat==null)return;float red=Mathf.Max(redPulse,Mathf.Clamp01((45-player.combat.health)/45f));
+            if(playerRenderers==null)playerRenderers=player.GetComponentsInChildren<Renderer>(true);
+            if(colorBlock==null)colorBlock=new MaterialPropertyBlock();
+            foreach(var r in playerRenderers){if(!r)continue;r.GetPropertyBlock(colorBlock);colorBlock.SetFloat("_Gold",0);colorBlock.SetFloat("_Red",red);r.SetPropertyBlock(colorBlock);}
+        }
+        void FillOffers()
+        {
+            while(offered.Count<3){int n=Random.Range(0,UpgradeNames.Length);if(!chosen.Contains(n)&&!offered.Contains(n))offered.Add(n);}
         }
         public void TogglePause()
         {
             if(state==SumiRunState.Death||state==SumiRunState.Victory)return;
-            if(state==SumiRunState.Paused){state=beforePause;SumiTime.Menu(state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo);Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;}
+            if(state==SumiRunState.Paused){state=beforePause;bool choosing=state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo;SumiTime.Menu(choosing);Cursor.lockState=choosing?CursorLockMode.None:CursorLockMode.Locked;Cursor.visible=choosing;}
             else {beforePause=state;state=SumiRunState.Paused;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
         }
         void Restart(){SumiTime.Reset();SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);}
@@ -115,36 +117,105 @@ namespace Sumi
 
         void Styles()
         {
-            if(title!=null)return;title=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.052f),fontStyle=FontStyle.Bold};title.normal.textColor=new Color(.06f,.055f,.045f);
-            small=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.020f),fontStyle=FontStyle.Normal};card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.021f),wordWrap=true,fontStyle=FontStyle.Bold};card.normal.textColor=new Color(.06f,.05f,.04f);center=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.026f)};
+            if(title!=null)return;
+            Font font=Resources.Load<Font>("Fonts/JiayouAkira-MAVEY");
+            title=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.052f)};title.normal.textColor=new Color(.07f,.055f,.05f);
+            small=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.020f)};
+            hud=new GUIStyle(small);hud.normal.textColor=new Color(.08f,.07f,.065f);
+            card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.025f)};card.normal.textColor=new Color(.07f,.05f,.04f);
+            center=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.028f)};
+            wheelName=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.027f)};wheelName.normal.textColor=Color.white;
+            wheelNote=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.017f)};wheelNote.normal.textColor=Color.white;
+            BuildHudTextures();
         }
         void OnGUI()
         {
             Styles();float w=Screen.width,h=Screen.height;Color old=GUI.color;
-            // Separate red and gold washes preserve their meaning instead of blending to orange.
             float low=player&&player.combat!=null?Mathf.Clamp01((45-player.combat.health)/45f):0;
             if(low>0||redPulse>0){GUI.color=new Color(.48f,.015f,.02f,Mathf.Max(low*.30f,redPulse*.42f));GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);}
-            if(waveGold>0||SumiTime.Golden){GUI.color=new Color(.82f,.62f,.18f,(SumiTime.Golden?.20f:waveGold*.12f));GUI.DrawTexture(new Rect(0,0,w,h*.09f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(0,h*.91f,w,h*.09f),Texture2D.whiteTexture);}
             GUI.color=old;
             if(player&&player.combat!=null)
             {
-                DrawBar(new Rect(w*.035f,h*.052f,w*.25f,10),player.combat.health/100f,new Color(.13f,.12f,.105f),"LIFE");
-                DrawBar(new Rect(w*.035f,h*.087f,w*.25f,7),player.combat.mastery/100f,new Color(.72f,.52f,.12f),"MASTERY");
+                if(state!=SumiRunState.UpgradeOne&&state!=SumiRunState.UpgradeTwo){DrawCombo(w,h);DrawHealth(w,h);}
                 if(player.combat.ExecutionTarget)GUI.Label(new Rect(w*.37f,h*.69f,w*.26f,42),"E  —  DECISIVE CUT",center);
             }
-            SumiEnemy focus=null;float nearest=999;foreach(var e in enemies)if(e&&!e.dead){float d=(e.transform.position-player.transform.position).sqrMagnitude;if(e.kind==SumiEnemyKind.Oni){focus=e;break;}if(d<nearest){nearest=d;focus=e;}}
-            if(focus){float width=focus.kind==SumiEnemyKind.Oni?w*.42f:w*.25f;float x=(w-width)*.5f;DrawBar(new Rect(x,h*.91f,width,8),focus.health/focus.maxHealth,focus.kind==SumiEnemyKind.Oni?new Color(.35f,.03f,.035f):new Color(.12f,.115f,.10f),focus.kind==SumiEnemyKind.Oni?"PAINTED ONI":"DEVIL");DrawBar(new Rect(x,h*.94f,width,5),focus.posture/focus.maxPosture,new Color(.67f,.48f,.12f),"POSTURE");}
-            if(Time.unscaledTime<bannerUntil)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
+            if(state!=SumiRunState.UpgradeOne&&state!=SumiRunState.UpgradeTwo&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
+            if(Time.unscaledTime<bannerUntil&&state!=SumiRunState.UpgradeOne&&state!=SumiRunState.UpgradeTwo)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
+            if(state==SumiRunState.Intro)GUI.Label(new Rect(w*.2f,h*.89f,w*.6f,25),"F  THROW INK",small);
             if(state==SumiRunState.Intro){GUI.Label(new Rect(w*.2f,h*.73f,w*.6f,h*.16f),"WASD move   •   LMB shoulder cut   •   RMB hold / perfect deflect\nSPACE Brush Flash   •   Q lock   •   E execute",small);}
             if(state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo)
             {
-                GUI.color=new Color(.91f,.89f,.82f,.96f);GUI.DrawTexture(new Rect(w*.08f,h*.28f,w*.84f,h*.48f),Texture2D.whiteTexture);GUI.color=old;
-                for(int i=0;i<3;i++){Rect r=new Rect(w*(.11f+i*.27f),h*.36f,w*.24f,h*.30f);if(GUI.Button(r,(i+1)+"\n\n"+UpgradeNames[offered[i]]+"\n\n"+UpgradeText[offered[i]],card))Choose(i);}
+                DrawSpellWheel(w,h);
             }
             if(state==SumiRunState.Death||state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),state==SumiRunState.Victory?"THE COURT IS QUIET":"YOUR GOLD RETURNS TO PAPER",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  PAINT AGAIN",card))Restart();}
             if(state==SumiRunState.Paused){GUI.color=new Color(.88f,.87f,.82f,.93f);GUI.DrawTexture(new Rect(w*.31f,h*.27f,w*.38f,h*.40f),Texture2D.whiteTexture);GUI.color=old;GUI.Label(new Rect(w*.32f,h*.31f,w*.36f,60),"STILLNESS",title);if(GUI.Button(new Rect(w*.40f,h*.46f,w*.20f,45),"RESUME",card))TogglePause();if(GUI.Button(new Rect(w*.40f,h*.55f,w*.20f,45),"RESTART RUN",card))Restart();}
         }
-        void DrawBar(Rect r,float value,Color fill,string label){GUI.color=new Color(.8f,.79f,.73f,.8f);GUI.DrawTexture(r,Texture2D.whiteTexture);GUI.color=fill;GUI.DrawTexture(new Rect(r.x,r.y,r.width*Mathf.Clamp01(value),r.height),Texture2D.whiteTexture);GUI.color=Color.white;GUI.Label(new Rect(r.x,r.y-20,r.width,18),label,small);}
+        void DrawCombo(float w,float h)
+        {
+            float x=w*.035f,y=h*.077f,size=Mathf.Clamp(h*.028f,20,30);int step=player.combat.ComboStep;
+            GUI.Label(new Rect(x,y-30,170,26),"COMBO",hud);
+            for(int i=0;i<3;i++)
+            {
+                float px=x+i*(size+8);GUI.color=new Color(.02f,.018f,.02f,.90f);GUI.DrawTexture(new Rect(px-2,y-2,size+4,size+4),pipTexture);
+                GUI.color=i<step?(i==2?new Color(.68f,.11f,.13f):new Color(.96f,.90f,.78f)):new Color(.25f,.23f,.23f);
+                GUI.DrawTexture(new Rect(px,y,size,size),pipTexture);
+            }
+            GUI.color=Color.white;GUI.Label(new Rect(x,y+size+7,200,24),player.combat.ThrowCooldownRemaining>0?"F  INK  "+player.combat.ThrowCooldownRemaining.ToString("0.0"):"F  INK",hud);
+        }
+        void DrawHealth(float w,float h)
+        {
+            float x=w*.035f,width=Mathf.Clamp(w*.29f,220,400),y=h*.94f;
+            GUI.Label(new Rect(x,y-32,width,28),"HEALTH",hud);
+            Rect bar=new Rect(x,y,width,9);
+            GUI.color=new Color(.015f,.014f,.018f,.9f);GUI.DrawTexture(new Rect(bar.x-2,bar.y-2,bar.width+4,bar.height+4),Texture2D.whiteTexture);
+            GUI.color=new Color(.23f,.05f,.06f,1);GUI.DrawTexture(new Rect(bar.x,bar.y,bar.width*Mathf.Clamp01(trailHealth),bar.height),Texture2D.whiteTexture);
+            GUI.color=Color.white;GUI.DrawTexture(new Rect(bar.x,bar.y,bar.width*Mathf.Clamp01(shownHealth),bar.height),barTexture);
+            GUI.color=Color.white;
+        }
+        void DrawEnemyHealth(float w,float h,SumiEnemy enemy)
+        {
+            float width=Mathf.Clamp(w*.23f,210,360),x=w-width-w*.035f,y=h*.078f;
+            string name=enemy.kind==SumiEnemyKind.Oni?"PAINTED ONI":enemy.kind==SumiEnemyKind.Shade?"INK SHADE":"DEVIL";
+            GUI.Label(new Rect(x,y-38,width,34),name,hud);
+            GUI.color=new Color(.025f,.022f,.025f,.90f);GUI.DrawTexture(new Rect(x-2,y-2,width+4,10),Texture2D.whiteTexture);
+            GUI.color=new Color(.68f,.10f,.13f);GUI.DrawTexture(new Rect(x,y,width*Mathf.Clamp01(enemy.health/enemy.maxHealth),6),Texture2D.whiteTexture);GUI.color=Color.white;
+        }
+        void DrawSpellWheel(float w,float h)
+        {
+            FillOffers();
+            Color old=GUI.color;GUI.color=new Color(.015f,.013f,.014f,.52f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);GUI.color=old;
+            float size=Mathf.Min(w*.44f,h*.68f),cx=w*.5f,cy=h*.52f;Rect wheel=new Rect(cx-size*.5f,cy-size*.5f,size,size);
+            Vector2 pointer=Event.current.mousePosition-new Vector2(cx,cy);float radius=pointer.magnitude;
+            int hover=-1;if(radius>size*.10f&&radius<size*.48f){float a=(Mathf.Atan2(pointer.y,pointer.x)*Mathf.Rad2Deg+150+360)%360;hover=Mathf.FloorToInt(a/120);}
+            for(int i=0;i<3;i++){GUI.color=i==hover?new Color(.68f,.07f,.10f):new Color(.045f,.040f,.044f);GUI.DrawTexture(wheel,wheelSegments[i]);}
+            GUI.color=new Color(.025f,.023f,.026f,.98f);GUI.DrawTexture(new Rect(cx-size*.11f,cy-size*.11f,size*.22f,size*.22f),pipTexture);GUI.color=old;
+            for(int i=0;i<3;i++)
+            {
+                float angle=(-90+i*120)*Mathf.Deg2Rad;Vector2 point=new Vector2(cx+Mathf.Cos(angle)*size*.31f,cy+Mathf.Sin(angle)*size*.31f);
+                GUI.Label(new Rect(point.x-size*.23f,point.y-36,size*.46f,48),UpgradeNames[offered[i]],wheelName);
+                GUI.Label(new Rect(point.x-size*.23f,point.y+10,size*.46f,31),UpgradeText[offered[i]],wheelNote);
+            }
+            GUI.color=old;
+            if(Event.current.type==EventType.MouseDown&&Event.current.button==0&&hover>=0){Choose(hover);Event.current.Use();}
+        }
+        void BuildHudTextures()
+        {
+            pipTexture=new Texture2D(48,48,TextureFormat.RGBA32,false);pipTexture.filterMode=FilterMode.Bilinear;
+            for(int y=0;y<48;y++)for(int x=0;x<48;x++){float r=Vector2.Distance(new Vector2(x,y),new Vector2(23.5f,23.5f));float alpha=Mathf.Clamp01((23-r)*.75f);pipTexture.SetPixel(x,y,new Color(1,1,1,alpha));}pipTexture.Apply();
+            barTexture=new Texture2D(256,1,TextureFormat.RGBA32,false);barTexture.filterMode=FilterMode.Bilinear;
+            for(int x=0;x<256;x++){float t=x/255f;barTexture.SetPixel(x,0,Color.Lerp(new Color(.76f,.13f,.18f),new Color(.055f,.015f,.025f),Mathf.SmoothStep(0,1,Mathf.Clamp01((t-.65f)/.35f))));}barTexture.Apply();
+            wheelSegments=new Texture2D[3];for(int i=0;i<3;i++){wheelSegments[i]=new Texture2D(384,384,TextureFormat.RGBA32,false);wheelSegments[i].filterMode=FilterMode.Bilinear;}
+            for(int y=0;y<384;y++)for(int x=0;x<384;x++)
+            {
+                float dx=x-191.5f,dy=191.5f-y,r=Mathf.Sqrt(dx*dx+dy*dy)/384f;
+                float a=(Mathf.Atan2(dy,dx)*Mathf.Rad2Deg+150+360)%360;
+                int sector=Mathf.FloorToInt(a/120);float local=a%120,edge=Mathf.Min(local,120-local);
+                float alpha=Mathf.Clamp01((r-.105f)*180)*Mathf.Clamp01((.49f-r)*180)*Mathf.Clamp01((edge-1.3f)*.6f);
+                for(int i=0;i<3;i++)wheelSegments[i].SetPixel(x,y,new Color(1,1,1,i==sector?alpha:0));
+            }
+            foreach(var segment in wheelSegments)segment.Apply();
+        }
+        void OnDestroy(){if(pipTexture)Destroy(pipTexture);if(barTexture)Destroy(barTexture);if(wheelSegments!=null)foreach(var segment in wheelSegments)if(segment)Destroy(segment);}
     }
 
     public sealed class SumiArrowStrike:MonoBehaviour
