@@ -36,7 +36,7 @@ namespace Sumi
                     focus+=d*(guarding?.12f:.22f);
                 }
             }
-            bool striking=combatState==SumiCombatState.Attack1||combatState==SumiCombatState.DashStrike;
+            bool striking=player.combat&&player.combat.IsAttacking;
             bool dashing=combatState==SumiCombatState.Dash||combatState==SumiCombatState.DashStrike;
             float zoom=distance+(dashing?.23f:0);
             if(player.target&&player.locked)zoom+=Mathf.Clamp((Vector3.Distance(player.transform.position,player.target.position)-2.3f)*.14f,0,.65f);
