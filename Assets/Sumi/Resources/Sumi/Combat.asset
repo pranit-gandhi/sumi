@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 369273a2db059114791f6ce044027de2, type: 3}
+  m_Name: Combat
+  m_EditorClassIdentifier: Assembly-CSharp::Sumi.SumiConfig
+  moveSpeed: 2.15
+  acceleration: 8.5
+  dodgeSpeed: 9
+  dodgeDuration: 0.34
+  dodgeCooldown: 0.72
+  parryStartup: 0.025
+  perfectWindow: 0.16
+  parryWindow: 0.34
+  parryRecovery: 0.55
+  lightDamage: 18
+  finishingDamage: 27
+  perfectPosture: 34
+  normalPosture: 16
+  normalGold: 10
+  perfectGold: 22
+  damageGoldLoss: 20
+  swingDuration:
+  - 0.57
+  - 0.6
+  - 0.78
+  activeStart:
+  - 0.16
+  - 0.2
+  - 0.28
+  activeEnd:
+  - 0.3
+  - 0.34
+  - 0.44
+  goldenDuration: 3.8
