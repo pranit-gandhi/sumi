@@ -1,0 +1,39 @@
+# Unity generated data
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Bb]uild/
+/[Bb]uilds/
+/MemoryCaptures/
+/Recordings/
+/Review/
+/Assets/_Recovery/
+/Assets/_Recovery.meta
+/EARLY_PROMPTS.txt
+/Tools/AssetSources/
+/Tools/mcp-*.json
+/Tools/character-inspect.json
+/Tools/Repair-SumiMcp.ps1
+# IDE and generated solutions
+.vs/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+sysinfo.txt
+crashlytics-build.properties
+.DS_Store
+Thumbs.db
+/Tools/editor-command.txt
+/Tools/mcp-call.json
+# Keep Assets and all accompanying .meta files under source control.

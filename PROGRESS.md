@@ -1,0 +1,55 @@
+# Sumi progress
+
+Updated 2026-09-18. Current milestone: complete WebGL vertical slice and itch.io release candidate.
+
+## Current playable state
+
+- Unity 6000.2.14f1, URP 17.2.0, main scene `Assets/Scenes/SumiShrine.unity`.
+- Complete arena run: introduction, two enemy waves, a randomized three-of-eight upgrade choice after each wave, Painted Oni boss, victory/death, pause and immediate restart.
+- The old corridor is now a rounded four-gate paper courtyard. Its clear center is surrounded by repeated ink huts, torii, lanterns, dry-brush shrubs, pines, shrine geometry and distant mountain washes. Enemies enter from the four cardinal sides.
+- The active player remains the real skinned Humanoid ronin with reduced kasa, shadowed face, layered kimono/hakama, moving haori and one katana. Do not run `SumiHumanoidBuild.Build`; use `SumiCharacterArt.Apply` only for intentional character regeneration.
+- Controls: WASD walk, Shift jog, Left Mouse shoulder cut, Right Mouse hold/timed deflection, Space Brush Flash, Q lock-on, E execution, Esc pause, R restart after death/victory.
+
+## Combat and run systems
+
+- Shoulder cut: fixed initial strike line with limited early aim help, swept blade traces, one hit per enemy, ink/pale trails, hit-stop, audio and camera response.
+- Brush Flash: 3.95 m evasive waist cut, 0.98 s cooldown and authored invulnerability/contact windows. Lethal minor-enemy contact uses the ink-clipped split.
+- Right Mouse has a 0.025–0.145 s perfect window and a held resolve guard. Deflections damage posture and add mastery. Damage removes mastery and grants 0.52 s anti-chain-hit grace.
+- Broken posture exposes an enemy for 2.5 s. E performs a decisive execution.
+- Group AI uses one attack token, orbit direction, local separation, damped CharacterController movement, locked strike direction, readable windup and recovery.
+- Enemy roster: masked Retainer, faster Ink Shade and 1.32× Painted Oni with horned mask, broad ink mantle, vermilion corruption, 340 health and 175 posture.
+- Wave 2 and the boss add announced arrow strikes: a crimson brush ring warns for 0.82 s. Strikes are dodgeable and perfect-deflectable.
+- Gold mastery drives ronin shader accents and eighteen shrine/lantern/torii surfaces. Damage drives shader red and a separate screen wash. Maximum mastery triggers 3.6 s Golden Silence, then mastery returns to 55.
+- Eight no-repeat run upgrades: Gilded Edge, Third Bell, Red Reversal, Brush Step, Unbroken Line, Quiet Moon, Falling Petal and Ink Guard.
+- UI includes life, mastery, focused-enemy health/posture, boss display, execution prompt, wave titles, upgrade seals, pause, death and victory.
+- `SumiTime` centrally owns hit-stop, Golden Silence and menu pause.
+
+## Smoothness and performance
+
+- Enemy recovery crossfades to locomotion instead of holding the final attack pose. Normal attacks no longer continuously home, and combat startup retains some approach momentum.
+- Camera impulse is applied after a separate smoothed pose, preventing shake feedback; impulse motion uses stable 19–23 Hz frequencies.
+- The rebuilt arena has about 701 MeshRenderers versus roughly 3,731 before. Static windless drawings stop updating property blocks, and the contour shader includes GPU-instancing variants.
+
+## Recorded verification
+
+- Full run: **PASS** — Wave 1, upgrade 1, Wave 2, upgrade 2, Oni identity/stats, victory, restart and time restoration.
+- Death flow: **PASS** — death state, control lock, red takeover hook and time restoration.
+- Combat sandbox: **PASS** — one-hit tracing, strike completion, perfect/held guard, Brush Flash split and hit-stop restoration.
+- Combat motion: **PASS** — maximum sampled 50 ms enemy step 0.105 m; no facing snap in the aligned sample; locomotion and spacing passed.
+- Fresh WebGL build: **Succeeded**, zero errors, 31,169,024 extracted bytes, duration 5:03.95.
+- Fresh local HTTP/headless-Chrome smoke: loading hidden, blank warning, 960×600 canvas rendered with gameplay HUD.
+- Fresh itch ZIP: 30,706,743 compressed bytes, 31,169,024 extracted bytes, 17 files; largest `Build/WebGL.data.unityweb` 20,677,775 bytes; root `index.html` confirmed; longest path 41 characters.
+
+Persistent Unity AI account/licensing 404 warnings are external. The final project compile/build has no Sumi errors.
+
+## Main files
+
+- Run, waves, upgrades, UI, arrows, time: `Assets/Sumi/Scripts/SumiRun.cs`
+- Combat and feedback: `Assets/Sumi/Scripts/SumiCombat.cs`
+- Arena: `Assets/Sumi/Scripts/SumiSketchWorld.cs`
+- Player/camera: `Assets/Sumi/Scripts/SumiPlayer.cs`, `Assets/Sumi/Scripts/SumiCamera.cs`
+- Release: `Builds/WebGL/`, `Builds/Sumi-itch.zip`
+
+## Remaining judgment call
+
+The recorded automated and browser checks passed before the disposable checking utilities were removed from the shareable repository. Final difficulty still benefits from one human play session; the next iteration should tune exposed timing, damage and boss health without rebuilding the visual systems.
