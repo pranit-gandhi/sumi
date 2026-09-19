@@ -135,7 +135,7 @@ namespace Sumi
             SumiEnemy focus=null;float nearest=999;foreach(var e in enemies)if(e&&!e.dead){float d=(e.transform.position-player.transform.position).sqrMagnitude;if(e.kind==SumiEnemyKind.Oni){focus=e;break;}if(d<nearest){nearest=d;focus=e;}}
             if(focus){float width=focus.kind==SumiEnemyKind.Oni?w*.42f:w*.25f;float x=(w-width)*.5f;DrawBar(new Rect(x,h*.91f,width,8),focus.health/focus.maxHealth,focus.kind==SumiEnemyKind.Oni?new Color(.35f,.03f,.035f):new Color(.12f,.115f,.10f),focus.kind==SumiEnemyKind.Oni?"PAINTED ONI":"DEVIL");DrawBar(new Rect(x,h*.94f,width,5),focus.posture/focus.maxPosture,new Color(.67f,.48f,.12f),"POSTURE");}
             if(Time.unscaledTime<bannerUntil)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
-            if(state==SumiRunState.Intro){GUI.Label(new Rect(w*.2f,h*.73f,w*.6f,h*.16f),"WASD move   •   LMB shoulder cut   •   RMB hold / perfect deflect\nSPACE Brush Flash   •   Q lock   •   E execute",small);}
+            if(state==SumiRunState.Intro){GUI.Label(new Rect(w*.2f,h*.73f,w*.6f,h*.16f),"WASD move   •   LMB three-cut chain: 袈裟 · 逆袈裟 · 回旋   •   RMB hold / perfect deflect\nSPACE Brush Flash   •   Q lock, WHEEL switch foe   •   E execute",small);}
             if(state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo)
             {
                 GUI.color=new Color(.91f,.89f,.82f,.96f);GUI.DrawTexture(new Rect(w*.08f,h*.28f,w*.84f,h*.48f),Texture2D.whiteTexture);GUI.color=old;

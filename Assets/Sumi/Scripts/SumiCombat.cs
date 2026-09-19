@@ -16,11 +16,33 @@ namespace Sumi
         public float StateTime=>elapsed;
         public bool IsGuarding=>state==SumiCombatState.GuardStartup||state==SumiCombatState.GuardHeld;
         public bool Perfect=>state==SumiCombatState.GuardStartup&&elapsed>=.025f&&elapsed<=.145f;
+        public int ChainStep=>chainIndex;
+        public static bool IsChainCut(SumiCombatState s)=>s==SumiCombatState.Attack1||s==SumiCombatState.Attack2||s==SumiCombatState.Attack3;
 
-        const float AttackBuffer=.21f,GuardBuffer=.15f;
-        const float NormalDuration=.72f,NormalActiveStart=.235f,NormalActiveEnd=.405f;
+        const float AttackBuffer=.28f,GuardBuffer=.22f,DashBuffer=.20f;
+        // How long a finished cut keeps the sequence alive. Past this the next attack opens at step one.
+        const float ChainMemory=.60f;
+        const float SoftLockRange=6.2f,SoftLockDot=.55f,AssistDegrees=26f;
         const float FlashDuration=.52f,FlashActiveStart=.16f,FlashActiveEnd=.34f,FlashDistance=3.95f;
-        SumiPlayer player;SumiHumanoidRonin human;float elapsed,attackAt=-9,guardAt=-9,recovery,lastMotion,nextDashAt,damageGraceUntil;
+
+        // Three linked cuts. Every step opens on the blade pose the previous one closed with, so a
+        // chained sequence reads as one continuous stroke; SumiBladePose holds the matching arcs.
+        // chainAt is the earliest moment a buffered attack becomes the follow-up, cancelAt the
+        // earliest moment guard or footwork may take the action back.
+        struct Cut
+        {
+            public SumiCombatState state;public string clip;public float fade,animSpeed;
+            public float duration,activeStart,activeEnd,damage,posture,travel,chainAt,cancelAt,reach,contact,assist;
+        }
+        static readonly Cut[] Chain=
+        {
+            new Cut{state=SumiCombatState.Attack1,clip="Attack1",fade=.055f,animSpeed=1.26f,duration=.62f,activeStart=.175f,activeEnd=.325f,damage=18,posture=16,travel=.42f,chainAt=.34f,cancelAt=.40f,reach=1.05f,contact=.44f,assist=.20f},
+            new Cut{state=SumiCombatState.Attack2,clip="Attack2",fade=.045f,animSpeed=1.24f,duration=.54f,activeStart=.135f,activeEnd=.285f,damage=21,posture=19,travel=.46f,chainAt=.30f,cancelAt=.36f,reach=1.10f,contact=.46f,assist=.16f},
+            new Cut{state=SumiCombatState.Attack3,clip="Attack3",fade=.050f,animSpeed=.69f, duration=.80f,activeStart=.255f,activeEnd=.455f,damage=30,posture=30,travel=.66f,chainAt=-1f, cancelAt=.58f,reach=1.22f,contact=.54f,assist=.26f},
+        };
+
+        SumiPlayer player;SumiHumanoidRonin human;float elapsed,attackAt=-9,guardAt=-9,dashAt=-9,recovery,lastMotion,nextDashAt,damageGraceUntil;
+        int chainIndex,chainNext;float chainExpireAt=-9,executionScanAt;
         bool guardHeld,hitActive;Vector3 dashDir;float dashDistance;Transform bladeBase,bladeTip;TrailRenderer trail,inkTrail;
         Vector3 strikeDir;SumiEnemy executionTarget;int perfectStreak;bool gilded,thirdBell,redReversal,brushStep,unbrokenLine,quietMoon,fallingPetal,inkGuard,guardAvailable,empowered;
         readonly HashSet<int> hitIds=new HashSet<int>();readonly Collider[] hits=new Collider[16];Vector3 oldBase,oldTip;
@@ -48,79 +70,127 @@ namespace Sumi
         public void Tick(Vector2 axis,bool attack,bool guardDown,bool guardPressed,bool dash,bool execute=false)
         {
             float now=Time.time,dt=Time.deltaTime;
-            if(attack)attackAt=now;if(guardPressed)guardAt=now;guardHeld=guardDown;
-            if(state==SumiCombatState.Dead)return;elapsed+=dt;FindExecutionTarget();if(execute&&ExecutionTarget){Execute(ExecutionTarget);return;}
+            if(attack)attackAt=now;if(guardPressed)guardAt=now;if(dash)dashAt=now;guardHeld=guardDown;
+            bool dashWanted=now-dashAt<=DashBuffer&&now>=nextDashAt;
+            if(state==SumiCombatState.Dead)return;elapsed+=dt;ScanExecutionTarget();if(execute&&ExecutionTarget){Execute(ExecutionTarget);return;}
             switch(state)
             {
                 case SumiCombatState.Free:
                     guardResolve=Mathf.Min(100,guardResolve+dt*36);
                     if(now-guardAt<=GuardBuffer){Enter(SumiCombatState.GuardStartup,"Locomotion",.11f);return;}
-                    if(dash&&now>=nextDashAt){StartDashStrike(axis);return;}
-                    if(now-attackAt<=AttackBuffer){StartShoulderCut();return;}
+                    if(dashWanted){StartDashStrike(axis);return;}
+                    if(now-attackAt<=AttackBuffer){StartChainCut(now);return;}
                     player.FreeMove(axis,dt);return;
                 case SumiCombatState.GuardStartup:
                     player.GuardMove(axis,dt);if(axis.sqrMagnitude<.02f&&player.locked)FaceTarget(dt,380);
                     if(!guardHeld){Enter(SumiCombatState.GuardRecovery,null,0);return;}
-                    if(dash&&now>=nextDashAt){StartDashStrike(axis);return;}
+                    if(dashWanted){StartDashStrike(axis);return;}
                     if(elapsed>=.16f)Enter(SumiCombatState.GuardHeld,null,0);return;
                 case SumiCombatState.GuardHeld:
                     player.GuardMove(axis,dt);if(axis.sqrMagnitude<.02f&&player.locked)FaceTarget(dt,380);
                     guardResolve=Mathf.Min(100,guardResolve+dt*7);
-                    if(dash&&now>=nextDashAt){StartDashStrike(axis);return;}
+                    if(dashWanted){StartDashStrike(axis);return;}
                     if(!guardHeld)Enter(SumiCombatState.GuardRecovery,null,0);return;
                 case SumiCombatState.GuardRecovery:
                     player.CombatBrake(dt);
-                    if(dash&&now>=nextDashAt){StartDashStrike(axis);return;}
+                    if(dashWanted){StartDashStrike(axis);return;}
+                    if(now-attackAt<=AttackBuffer){StartChainCut(now);return;}
                     if(elapsed>=.18f)Enter(SumiCombatState.Free,"Locomotion",.10f);return;
                 case SumiCombatState.Dash:
                     Enter(SumiCombatState.Free,"Locomotion",.10f);return;
                 case SumiCombatState.DashStrike:
                     player.Face(dashDir,dt,720);CurvedTravel(dashDir,FlashDuration,dashDistance);
-                    AttackWindow(FlashActiveStart,FlashActiveEnd,32,48,SumiHitKind.DashCut);
-                    if(elapsed>=FlashDuration)Enter(SumiCombatState.Free,"Locomotion",.12f);return;
-                case SumiCombatState.Attack1:
-                    if(dash&&now>=nextDashAt&&elapsed>=.12f){StartDashStrike(axis);return;}
-                    if(elapsed<.12f&&player.target){Vector3 assisted=TargetDirection();strikeDir=Vector3.RotateTowards(strikeDir,assisted,Mathf.Deg2Rad*15*dt/.12f,0);}
-                    player.Face(strikeDir,dt,520);CurvedTravel(strikeDir,NormalDuration,.38f);
-                    AttackWindow(NormalActiveStart,NormalActiveEnd,empowered?35:22,empowered?32:20,SumiHitKind.ShoulderCut);
-                    if(elapsed>=NormalDuration)
+                    AttackWindow(FlashActiveStart,FlashActiveEnd,32,48,SumiHitKind.DashCut,dashDir,.92f,.38f);
+                    if(elapsed>=FlashDuration)
                     {
-                        if(now-guardAt<=GuardBuffer)Enter(SumiCombatState.GuardStartup,"Locomotion",.10f);
-                        else if(now-attackAt<=AttackBuffer)StartShoulderCut();
-                        else Enter(SumiCombatState.Free,"Locomotion",.12f);
+                        if(now-attackAt<=AttackBuffer){StartChainCut(now);return;}
+                        Enter(SumiCombatState.Free,"Locomotion",.12f);
                     }
                     return;
+                case SumiCombatState.Attack1:
+                case SumiCombatState.Attack2:
+                case SumiCombatState.Attack3:
+                    TickChainCut(now,dt,axis,dashWanted);return;
                 case SumiCombatState.HitStun:
                     player.CombatBrake(dt);if(elapsed>=recovery)Enter(SumiCombatState.Free,"Locomotion",.14f);return;
             }
         }
 
-        void StartShoulderCut(){attackAt=-9;strikeDir=TargetDirection();empowered=gilded&&empowered;Enter(SumiCombatState.Attack1,"Attack1",.055f);SumiCombatFeedback.Swing(false);}
+        void TickChainCut(float now,float dt,Vector2 axis,bool dashWanted)
+        {
+            var cut=Chain[chainIndex];
+            // Brush Flash outranks the chain once the opening frames have passed, and carries the
+            // sequence with it so a dash-cancel can still be answered with the follow-up cut.
+            if(dashWanted&&elapsed>=.12f){StartDashStrike(axis);return;}
+            // Steering is confined to the rise of the arm; past that the committed line is the line.
+            if(elapsed<cut.assist){Vector3 wanted=TargetDirection();if(wanted.sqrMagnitude>.01f)strikeDir=Vector3.RotateTowards(strikeDir,wanted,Mathf.Deg2Rad*AssistDegrees*dt/cut.assist,0);}
+            player.Face(strikeDir,dt,520);CurvedTravel(strikeDir,cut.duration,cut.travel);
+            AttackWindow(cut.activeStart,cut.activeEnd,Scaled(cut.damage),Scaled(cut.posture),SumiHitKind.ShoulderCut,strikeDir,cut.reach,cut.contact);
+
+            bool canCancel=elapsed>=cut.cancelAt;
+            if(canCancel&&now-guardAt<=GuardBuffer){ReleaseChain(now);Enter(SumiCombatState.GuardStartup,"Locomotion",.10f);return;}
+            if(cut.chainAt>=0&&elapsed>=cut.chainAt&&now-attackAt<=AttackBuffer){StartChainCut(now);return;}
+            // Walking out of the tail is allowed once the blade has passed through; the sequence
+            // stays remembered for ChainMemory so stepping aside does not cost the follow-up.
+            if(canCancel&&axis.sqrMagnitude>.25f&&now-attackAt>AttackBuffer){ReleaseChain(now);Enter(SumiCombatState.Free,"Locomotion",.11f);return;}
+            if(elapsed>=cut.duration)
+            {
+                if(cut.chainAt>=0&&now-attackAt<=AttackBuffer){StartChainCut(now);return;}
+                ReleaseChain(now);Enter(SumiCombatState.Free,"Locomotion",.12f);
+            }
+        }
+
+        float Scaled(float amount)=>empowered?amount*1.6f:amount;
+        // The sequence is remembered rather than held: a cut that is not answered inside
+        // ChainMemory drops the player back to the opening stroke.
+        void ReleaseChain(float now){chainExpireAt=now+ChainMemory;}
+        void BreakChain(){chainNext=0;chainExpireAt=-9;}
+
+        void StartChainCut(float now)
+        {
+            attackAt=-9;
+            if(now>chainExpireAt)chainNext=0;
+            chainIndex=Mathf.Clamp(chainNext,0,Chain.Length-1);
+            chainNext=chainIndex+1<Chain.Length?chainIndex+1:0;
+            var cut=Chain[chainIndex];
+            strikeDir=TargetDirection();
+            chainExpireAt=now+cut.duration+ChainMemory;
+            Enter(cut.state,cut.clip,cut.fade,cut.animSpeed);
+            SumiCombatFeedback.Swing(chainIndex);
+        }
         void StartDashStrike(Vector2 axis)
         {
-            attackAt=-9;nextDashAt=Time.time+.98f;
+            float now=Time.time;
+            attackAt=-9;dashAt=-9;nextDashAt=now+.65f;
             dashDir=axis.sqrMagnitude>.02f?player.WorldDirection(axis):TargetDirection();
             if(dashDir.sqrMagnitude<.01f)dashDir=player.transform.forward;
             dashDir.y=0;dashDir.Normalize();dashDistance=FlashDistance;
             // Stop beside a visible opponent instead of shooting through its body.
-            foreach(var enemy in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None))
+            var live=SumiEnemy.Active;
+            for(int i=live.Count-1;i>=0;i--)
             {
+                var enemy=live[i];
+                if(!enemy){live.RemoveAt(i);continue;}
                 if(enemy.dead)continue;
                 Vector3 to=enemy.transform.position-player.transform.position;to.y=0;
                 float range=to.magnitude;
                 if(range<.7f||range>FlashDistance+1f||Vector3.Dot(to/range,dashDir)<.72f)continue;
                 dashDistance=Mathf.Min(dashDistance,Mathf.Max(.65f,range-.78f));
             }
-            Enter(SumiCombatState.DashStrike,"Attack3",.045f);
+            chainExpireAt=Mathf.Max(chainExpireAt,now+FlashDuration+ChainMemory);
+            Enter(SumiCombatState.DashStrike,"Attack3",.045f,1f);
             SumiCombatFeedback.DashStroke(player.transform.position,player.transform.position+dashDir*dashDistance);
             SumiCombatFeedback.Swing(true);
         }
 
-        void Enter(SumiCombatState next,string animation,float fade)
+        void Enter(SumiCombatState next,string animation,float fade,float animSpeed=1f)
         {
+            // Hand the outgoing blade pose to the incoming one so a cancel never teleports the
+            // katana; SumiHumanoidRonin blends out of it over the opening frames.
+            if(human)human.CarryBlade(state,elapsed);
             hitActive=false;trail.emitting=false;inkTrail.emitting=false;hitIds.Clear();elapsed=0;lastMotion=0;state=next;
             player.BeginCombatMotion();player.dodgeRemaining=next==SumiCombatState.DashStrike?FlashDuration:0;
-            if(animation!=null)human.PlayCombat(animation,fade);
+            if(animation!=null)human.PlayCombat(animation,fade,animSpeed);
             if(next==SumiCombatState.GuardStartup&&SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.055f);
         }
 
@@ -136,19 +206,47 @@ namespace Sumi
         Vector3 TargetDirection()
         {
             if(player.target){var d=player.target.position-player.transform.position;d.y=0;if(d.sqrMagnitude<100)return d.normalized;}
+            var soft=SoftTarget();
+            if(soft){var d=soft.transform.position-player.transform.position;d.y=0;if(d.sqrMagnitude>.01f)return d.normalized;}
             return player.transform.forward;
         }
 
-        void AttackWindow(float start,float end,float damage,float posture,SumiHitKind kind)
+        // Without a held lock the cut still deserves an opponent. The nearest foe inside a shallow
+        // cone in front of the ronin becomes an aim hint only; it never sets player.locked.
+        SumiEnemy SoftTarget()
+        {
+            Vector3 origin=player.transform.position,facing=player.transform.forward;
+            SumiEnemy best=null;float bestScore=float.MaxValue;
+            var live=SumiEnemy.Active;
+            for(int i=live.Count-1;i>=0;i--)
+            {
+                var candidate=live[i];
+                if(!candidate){live.RemoveAt(i);continue;}
+                if(candidate.dead)continue;
+                Vector3 to=candidate.transform.position-origin;to.y=0;
+                float range=to.magnitude;
+                if(range<.01f||range>SoftLockRange)continue;
+                float alignment=Vector3.Dot(to/range,facing);
+                if(alignment<SoftLockDot)continue;
+                float score=range-alignment*2.4f;
+                if(score<bestScore){bestScore=score;best=candidate;}
+            }
+            return best;
+        }
+
+        void AttackWindow(float start,float end,float damage,float posture,SumiHitKind kind,Vector3 aim,float reach,float contactRadius)
         {
             bool active=elapsed>=start&&elapsed<=end;
             if(!active){hitActive=false;trail.emitting=false;inkTrail.emitting=false;return;}
             trail.emitting=true;inkTrail.emitting=true;Vector3 a=bladeBase.position,b=bladeTip.position;
             if(!hitActive){oldBase=a;oldTip=b;hitActive=true;}
             Trace(oldBase,a,.105f,damage,posture,kind);Trace(oldTip,b,.105f,damage,posture,kind);Trace(a,b,.13f,damage,posture,kind);
-            // The animation and trace remain primary; a small forward contact volume makes shoulder contact reliable.
-            Vector3 contact=player.transform.position+Vector3.up*(kind==SumiHitKind.DashCut?.92f:1.36f)+TargetDirection()*1.05f;
-            Trace(contact-TargetDirection()*.18f,contact+TargetDirection()*.18f,.38f,damage,posture,kind);
+            // The animation and trace remain primary; a small forward contact volume makes shoulder
+            // contact reliable. It follows the committed swing rather than a freshly picked target,
+            // so re-acquiring mid-cut cannot teleport the volume off the blade.
+            if(aim.sqrMagnitude<.01f)aim=player.transform.forward;else aim=aim.normalized;
+            Vector3 contact=player.transform.position+Vector3.up*(kind==SumiHitKind.DashCut?.92f:1.36f)+aim*reach;
+            Trace(contact-aim*.18f,contact+aim*.18f,contactRadius,damage,posture,kind);
             oldBase=a;oldTip=b;
         }
 
@@ -181,7 +279,7 @@ namespace Sumi
                 perfectStreak=0;guardResolve-=blockCost;enemy.Parried(false);AddMastery(10);SumiCombatFeedback.Hit(.035f,.14f,contact);
                 if(guardResolve<=0){recovery=.55f;Enter(SumiCombatState.HitStun,"Hit",.045f);}return;
             }
-            if(inkGuard&&guardAvailable&&mastery>=15){guardAvailable=false;AddMastery(-18);damage*=.2f;}health-=damage;AddMastery(-20);perfectStreak=0;damageGraceUntil=Time.time+.52f;recovery=.26f;Enter(SumiCombatState.HitStun,"Hit",.045f);SumiCombatFeedback.Hit(.045f,.18f,contact);if(SumiGame.I&&SumiGame.I.run)SumiGame.I.run.PlayerDamaged();
+            if(inkGuard&&guardAvailable&&mastery>=15){guardAvailable=false;AddMastery(-18);damage*=.2f;}health-=damage;AddMastery(-20);perfectStreak=0;damageGraceUntil=Time.time+.52f;recovery=.18f;BreakChain();Enter(SumiCombatState.HitStun,"Hit",.045f);SumiCombatFeedback.Hit(.045f,.18f,contact);if(SumiGame.I&&SumiGame.I.run)SumiGame.I.run.PlayerDamaged();
             if(health<=0)Enter(SumiCombatState.Dead,"Death",.08f);
         }
 
@@ -189,21 +287,42 @@ namespace Sumi
         {
             if(state==SumiCombatState.DashStrike&&elapsed>.07f&&elapsed<(brushStep?.36f:.32f))return;
             if(Perfect){AddMastery(22);perfectStreak++;SumiCombatFeedback.Parry(contact,Vector3.right);return;}
-            if(Time.time<damageGraceUntil)return;health-=damage;AddMastery(-16);damageGraceUntil=Time.time+.5f;recovery=.22f;Enter(SumiCombatState.HitStun,"Hit",.045f);if(SumiGame.I&&SumiGame.I.run)SumiGame.I.run.PlayerDamaged();if(health<=0)Enter(SumiCombatState.Dead,"Death",.08f);
+            if(Time.time<damageGraceUntil)return;health-=damage;AddMastery(-16);damageGraceUntil=Time.time+.5f;recovery=.18f;BreakChain();Enter(SumiCombatState.HitStun,"Hit",.045f);if(SumiGame.I&&SumiGame.I.run)SumiGame.I.run.PlayerDamaged();if(health<=0)Enter(SumiCombatState.Dead,"Death",.08f);
         }
-        void FindExecutionTarget(){executionTarget=null;float best=2.1f;foreach(var e in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None)){if(!e.postureBroken||e.dead)continue;float d=Vector3.Distance(player.transform.position,e.transform.position);if(d<best){best=d;executionTarget=e;}}}
-        void Execute(SumiEnemy e){Vector3 d=e.transform.position-player.transform.position;d.y=0;if(d.sqrMagnitude>.01f)player.transform.rotation=Quaternion.LookRotation(d);player.MoveCombat(d.normalized*Mathf.Max(0,d.magnitude-1.05f));e.Execute();AddMastery(8);health=Mathf.Min(100,health+(quietMoon?4:0));SumiCombatFeedback.Hit(.11f,.36f,e.transform.position+Vector3.up);if(fallingPetal)SumiTime.GoldenSilence(1.1f);Enter(SumiCombatState.Attack1,"Attack2",.04f);}
-        public void BeginWave(){guardAvailable=true;guardResolve=100;}
+        // A broken opponent stays broken for seconds; rescanning every frame only spends budget.
+        void ScanExecutionTarget()
+        {
+            if(Time.unscaledTime<executionScanAt&&(!executionTarget||(executionTarget.postureBroken&&!executionTarget.dead)))return;
+            executionScanAt=Time.unscaledTime+.08f;
+            executionTarget=null;float best=2.1f;
+            var live=SumiEnemy.Active;
+            for(int i=live.Count-1;i>=0;i--)
+            {
+                var e=live[i];
+                if(!e){live.RemoveAt(i);continue;}
+                if(!e.postureBroken||e.dead)continue;
+                float d=Vector3.Distance(player.transform.position,e.transform.position);
+                if(d<best){best=d;executionTarget=e;}
+            }
+        }
+        void Execute(SumiEnemy e){Vector3 d=e.transform.position-player.transform.position;d.y=0;if(d.sqrMagnitude>.01f)player.transform.rotation=Quaternion.LookRotation(d);player.MoveCombat(d.normalized*Mathf.Max(0,d.magnitude-1.05f));e.Execute();AddMastery(8);health=Mathf.Min(100,health+(quietMoon?4:0));SumiCombatFeedback.Hit(.11f,.36f,e.transform.position+Vector3.up);if(fallingPetal)SumiTime.GoldenSilence(1.1f);BreakChain();chainIndex=0;strikeDir=d.sqrMagnitude>.01f?d.normalized:player.transform.forward;Enter(SumiCombatState.Attack1,"Attack2",.04f,1f);}
+        public void BeginWave(){guardAvailable=true;guardResolve=100;BreakChain();}
         public void AddMastery(float amount){mastery=Mathf.Clamp(mastery+amount,0,100);if(mastery>=99&&!SumiTime.Golden){SumiTime.GoldenSilence(3.6f);mastery=55;if(quietMoon)health=Mathf.Min(100,health+18);}}
         public void ApplyUpgrade(int id){if(id==0)gilded=true;else if(id==1)thirdBell=true;else if(id==2)redReversal=true;else if(id==3)brushStep=true;else if(id==4)unbrokenLine=true;else if(id==5)quietMoon=true;else if(id==6)fallingPetal=true;else if(id==7)inkGuard=true;}
     }
 
     public sealed class SumiEnemy : MonoBehaviour
     {
+        // Combat, lock-on and the dash all need the live roster several times a frame; a registry
+        // keeps those queries off FindObjectsByType. Entries self-remove when an enemy is destroyed.
+        public static readonly List<SumiEnemy> Active=new List<SumiEnemy>();
         public float health=66,posture=70,maxHealth=66,maxPosture=70;public bool dead,postureBroken;public SumiEnemyState state;public SumiEnemyKind kind;
         public Transform visual;public Animator animator;
         SumiPlayer player;SumiRunDirector director;CharacterController body;Vector3 velocity,smoothVelocity,attackDirection;float elapsed,nextAttackAt,lastLunge;bool struck,hasToken;
         Transform bladeBase,bladeTip;static readonly int Speed=Animator.StringToHash("Speed");
+
+        void OnEnable(){if(!Active.Contains(this))Active.Add(this);}
+        void OnDisable(){Active.Remove(this);}
 
         public void Init(SumiPlayer p){Init(p,SumiEnemyKind.Retainer,SumiGame.I?SumiGame.I.run:null);}
         public void Init(SumiPlayer p,SumiEnemyKind enemyKind,SumiRunDirector run)
@@ -232,7 +351,7 @@ namespace Sumi
                 case SumiEnemyState.Approach:
                     int slot=director.OrbitIndex(this);float desiredRange=kind==SumiEnemyKind.Oni?2.45f:2.65f+(slot%2)*.34f;Vector3 tangent=Vector3.Cross(Vector3.up,dir)*((slot&1)==0?1:-1);
                     Vector3 wanted=range>desiredRange+.22f?dir*(kind==SumiEnemyKind.Shade?1.82f:1.48f):range<desiredRange-.34f?-dir*.82f:tangent*.48f;
-                    foreach(var other in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None)){if(other==this||other.dead)continue;Vector3 away=transform.position-other.transform.position;away.y=0;if(away.sqrMagnitude<1.15f)wanted+=away.normalized*(1.15f-away.magnitude)*1.5f;}
+                    for(int i=Active.Count-1;i>=0;i--){var other=Active[i];if(!other){Active.RemoveAt(i);continue;}if(other==this||other.dead)continue;Vector3 away=transform.position-other.transform.position;away.y=0;if(away.sqrMagnitude<1.15f)wanted+=away.normalized*(1.15f-away.magnitude)*1.5f;}
                     SmoothMove(wanted,dt);
                     if(range<=2.85f&&Time.time>=nextAttackAt&&director.RequestAttack(this)){hasToken=true;Enter(SumiEnemyState.Windup);}break;
                 case SumiEnemyState.Windup:
@@ -376,6 +495,8 @@ namespace Sumi
         public static void Parry(Vector3 at,Vector3 axis){Freeze(.075f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.30f);Mark(at,true,true,axis);}
         public static void WaistCut(SumiEnemy enemy,Vector3 at){Mark(new Vector3(enemy.transform.position.x,enemy.transform.position.y+.94f,enemy.transform.position.z),true,false,enemy.transform.right);}
         public static void Swing(bool fast){Play(fast?3:0);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(fast?.17f:.085f);}
+        // Each link of the chain rings a little brighter and lands a little harder than the last.
+        public static void Swing(int step){Play(0,1f+step*.12f);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.085f+step*.032f);}
         public static void DashStroke(Vector3 from,Vector3 to)
         {
             Ensure();int index=cursor;cursor=(cursor+1)%marks.Length;var line=marks[index];Vector3 side=Vector3.Cross(Vector3.up,(to-from).normalized)*.08f;
@@ -407,7 +528,7 @@ namespace Sumi
             }
             var clip=AudioClip.Create(name,count,1,rate,false);clip.SetData(data,0);return clip;
         }
-        static void Play(int kind){EnsureAudio();audioSource.pitch=1;audioSource.PlayOneShot(kind==0?swing:kind==1?impact:kind==2?parry:dash,kind==2?.78f:kind==1?.68f:.55f);}
+        static void Play(int kind,float pitch=1f){EnsureAudio();audioSource.pitch=pitch;audioSource.PlayOneShot(kind==0?swing:kind==1?impact:kind==2?parry:dash,kind==2?.78f:kind==1?.68f:.55f);}
         static void Mark(Vector3 at,bool strong,bool gilded,Vector3 axis=default)
         {
             Ensure();int index=cursor;cursor=(cursor+1)%marks.Length;var line=marks[index];float d=strong?.62f:.27f;if(axis.sqrMagnitude<.01f)axis=Vector3.right;axis.Normalize();
