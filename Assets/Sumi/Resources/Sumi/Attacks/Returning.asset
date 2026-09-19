@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792a467f80d395b448e70ef3fd14d18a, type: 3}
+  m_Name: Returning
+  m_EditorClassIdentifier: Assembly-CSharp::Sumi.SumiAttackDefinition
+  animationState: Attack2
+  arc: 1
+  duration: 0.46
+  activeWindow: {x: 0.09, y: 0.24}
+  linkWindow: {x: 0.24, y: 0.4}
+  guardCancel: 0.265
+  dodgeCancel: 0.255
+  hitDodgeCancel: 0.13
+  damage: 25
+  lunge: 0.4
+  startupMovement: 0.65
+  activeMovement: 0.3
+  recoveryMovement: 0.85
+  turnSpeed: 360
+  hitStop: 0.04
+  cameraKick: 0.11
+  blend: 0.065
+  finisher: 0
+  lightFollowUp: {fileID: 11400000, guid: 12e3b88baab72504aa2c59bec0188c5a, type: 2}
+  heavyFollowUp: {fileID: 11400000, guid: 02742522a6221654a8e7933cc37916be, type: 2}
