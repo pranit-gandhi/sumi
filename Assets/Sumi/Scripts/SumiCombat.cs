@@ -21,7 +21,7 @@ namespace Sumi
         void Update()
         {
             Vector3 from=transform.position;transform.position+=direction*18f*Time.deltaTime;
-            foreach(var enemy in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None))
+            foreach(var enemy in SumiEnemy.Active)
             {
                 if(!enemy||enemy.dead)continue;
                 Vector3 center=enemy.transform.position+Vector3.up*1.2f;
@@ -34,10 +34,14 @@ namespace Sumi
 
     public sealed class SumiEnemy : MonoBehaviour
     {
+        public static readonly List<SumiEnemy> Active=new List<SumiEnemy>();
         public float health=66,maxHealth=66;public bool dead;public SumiEnemyState state;public SumiEnemyKind kind;
         public Transform visual;public Animator animator;
         SumiPlayer player;SumiRunDirector director;CharacterController body;Vector3 velocity,smoothVelocity,attackDirection;float elapsed,nextAttackAt,lastLunge;bool struck,hasToken;
         Transform bladeBase,bladeTip;static readonly int Speed=Animator.StringToHash("Speed");
+
+        void OnEnable(){if(!Active.Contains(this))Active.Add(this);}
+        void OnDisable(){Active.Remove(this);}
 
         public void Init(SumiPlayer p){Init(p,SumiEnemyKind.Retainer,SumiGame.I?SumiGame.I.run:null);}
         public void Init(SumiPlayer p,SumiEnemyKind enemyKind,SumiRunDirector run)
@@ -66,7 +70,7 @@ namespace Sumi
                 case SumiEnemyState.Approach:
                     int slot=director.OrbitIndex(this);float desiredRange=kind==SumiEnemyKind.Oni?2.45f:2.65f+(slot%2)*.34f;Vector3 tangent=Vector3.Cross(Vector3.up,dir)*((slot&1)==0?1:-1);
                     Vector3 wanted=range>desiredRange+.22f?dir*(kind==SumiEnemyKind.Shade?1.82f:1.48f):range<desiredRange-.34f?-dir*.82f:tangent*.48f;
-                    foreach(var other in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None)){if(other==this||other.dead)continue;Vector3 away=transform.position-other.transform.position;away.y=0;if(away.sqrMagnitude<1.15f)wanted+=away.normalized*(1.15f-away.magnitude)*1.5f;}
+                    foreach(var other in Active){if(!other||other==this||other.dead)continue;Vector3 away=transform.position-other.transform.position;away.y=0;if(away.sqrMagnitude<1.15f)wanted+=away.normalized*(1.15f-away.magnitude)*1.5f;}
                     SmoothMove(wanted,dt);
                     if(range<=2.85f&&Time.time>=nextAttackAt&&director.RequestAttack(this)){hasToken=true;Enter(SumiEnemyState.Windup);}break;
                 case SumiEnemyState.Windup:

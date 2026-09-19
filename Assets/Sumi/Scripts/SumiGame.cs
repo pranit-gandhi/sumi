@@ -21,13 +21,54 @@ namespace Sumi
             run=gameObject.AddComponent<SumiRunDirector>();run.Init(player);
             Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
         }
-        void Update(){SumiCombatFeedback.Tick();if(UnityEngine.InputSystem.Keyboard.current?.qKey.wasPressedThisFrame==true){if(player.locked){player.locked=false;player.target=null;}else SelectTarget();}if(UnityEngine.InputSystem.Keyboard.current?.escapeKey.wasPressedThisFrame==true)run.TogglePause();}
-        void SelectTarget()
+        // Acquisition stays tighter than the range a held lock survives, so a foe drifting around
+        // the edge cannot make the lock flicker on and off.
+        const float LockRange=13f,LockDrop=16f;
+        void Update()
         {
-            var camera=Camera.main;SumiEnemy best=null;float score=float.MaxValue;
-            foreach(var candidate in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None))
-            {if(candidate.dead)continue;var offset=candidate.transform.position-player.transform.position;float distance=offset.magnitude;if(distance>13||Physics.Raycast(player.transform.position+Vector3.up,offset.normalized,distance,1<<8))continue;var viewport=camera.WorldToViewportPoint(candidate.transform.position+Vector3.up);if(viewport.z<0)continue;float center=(new Vector2(viewport.x-.5f,viewport.y-.5f)).sqrMagnitude;float candidateScore=center*26+distance;if(candidateScore<score){score=candidateScore;best=candidate;}}
-            if(best){player.target=best.transform;player.locked=true;view.Frame(best.transform,.22f);}
+            SumiCombatFeedback.Tick();
+            var keyboard=UnityEngine.InputSystem.Keyboard.current;
+            if(keyboard?.qKey.wasPressedThisFrame==true){if(player.locked)ReleaseLock();else SelectTarget(0);}
+            var mouse=UnityEngine.InputSystem.Mouse.current;
+            if(player.locked&&mouse!=null){float wheel=mouse.scroll.ReadValue().y;if(Mathf.Abs(wheel)>.01f)SelectTarget(wheel>0?1:-1);}
+            if(player.locked)MaintainLock();
+            if(keyboard?.escapeKey.wasPressedThisFrame==true)run.TogglePause();
+        }
+        void ReleaseLock(){player.locked=false;player.target=null;}
+        // A lock that outlives its target, or clings to something across the courtyard, reads as a
+        // bug. Drop it deliberately instead of letting the camera quietly stop steering.
+        void MaintainLock()
+        {
+            var held=player.target;
+            if(!held){ReleaseLock();return;}
+            var enemy=held.GetComponentInParent<SumiEnemy>();
+            if(!enemy||enemy.dead){ReleaseLock();return;}
+            Vector3 offset=held.position-player.transform.position;offset.y=0;
+            if(offset.magnitude>LockDrop)ReleaseLock();
+        }
+        // step 0 acquires, +1/-1 walks to the next foe on that side of the current one.
+        void SelectTarget(int step)
+        {
+            var camera=Camera.main;if(!camera)return;
+            var held=step==0?null:player.target;
+            Vector3 heldView=held?camera.WorldToViewportPoint(held.position+Vector3.up):Vector3.zero;
+            SumiEnemy best=null;float score=float.MaxValue;
+            var live=SumiEnemy.Active;
+            for(int i=live.Count-1;i>=0;i--)
+            {
+                var candidate=live[i];
+                if(!candidate){live.RemoveAt(i);continue;}
+                if(candidate.dead||candidate.transform==player.target)continue;
+                var offset=candidate.transform.position-player.transform.position;float distance=offset.magnitude;
+                if(distance>LockRange||Physics.Raycast(player.transform.position+Vector3.up,offset.normalized,distance,1<<8))continue;
+                var viewport=camera.WorldToViewportPoint(candidate.transform.position+Vector3.up);if(viewport.z<0)continue;
+                float center=(new Vector2(viewport.x-.5f,viewport.y-.5f)).sqrMagnitude;
+                float candidateScore=center*26+distance;
+                if(held){float side=viewport.x-heldView.x;if(side*step<=.01f)candidateScore+=64;}
+                if(candidateScore<score){score=candidateScore;best=candidate;}
+            }
+            // No cinematic yank on acquire; SumiCamera eases onto the new bearing under its own limit.
+            if(best){player.target=best.transform;player.locked=true;if(view)view.EngageLock();}
         }
         void OnDestroy(){SumiCombatFeedback.Clear();Cursor.lockState=CursorLockMode.None;Cursor.visible=true;I=null;}
     }
