@@ -1,6 +1,14 @@
 # Sumi handoff
 
-Updated 2026-09-18 after completion of the arena vertical slice and fresh WebGL release.
+Updated 2026-09-19 on PR #2 (`review/sumi-release`).
+
+## Current PR #2 refinement
+
+PR #2 remains the current implementation: its data-driven three-cut chain, heavy attack, Brush Flash, swept-blade contact, health-only rules, ink dart, spell wheel, HUD, Japanese-style font, run structure, and visuals are intact. Three narrowly selected ideas from PR #1 were manually adapted: eased lock-on with mouse authority and target cycling, a shared live-enemy registry, and rig-measured reach-limited two-hand IK. PR #1 was not merged or cherry-picked.
+
+Use Q to acquire/release lock and the mouse wheel to cycle visible targets while locked. The camera releases a dead or distant target automatically. `SumiEnemy.Active` is maintained by `OnEnable`/`OnDisable`; use it for live-enemy queries instead of scene-wide searches. `SumiGuardIK` in `Assets/Sumi/Scripts/SumiHumanoidRonin.cs` clamps hand goals to the measured arm envelope and slides/releases the off hand when a cut exceeds comfortable reach.
+
+Latest focused check: Unity 6000.2.14f1 compiled, Play Mode started, the active arena/player/enemy rendered, and the active Editor log contained no new Sumi exception. The fresh WebGL build succeeded; regenerated `Builds/Sumi-itch.zip` is 30,740,030 compressed bytes and 31,200,656 extracted bytes across 17 files, with root `index.html` and a 20,710,151-byte largest file. Unity AI account/licensing 404 warnings remain external.
 
 ## Open and run
 

@@ -90,8 +90,21 @@ namespace Sumi
     public sealed class SumiGuardIK:MonoBehaviour
     {
         public SumiPlayer player;
-        Animator animator;float weight;Vector3 lastGrip,lastLine;bool poseReady;
+        Animator animator;Transform leftShoulder,rightShoulder;
+        float weight,offHandRelease,hiltGrip=GripFar,hiltSlide,comfort=.47f,reach=.56f;
+        Vector3 lastGrip,lastLine;bool poseReady;
+        const float GripFar=.24f,GripNear=.11f;
         void Awake(){animator=GetComponent<Animator>();}
+        void Start()
+        {
+            leftShoulder=animator?animator.GetBoneTransform(HumanBodyBones.LeftUpperArm):null;
+            rightShoulder=animator?animator.GetBoneTransform(HumanBodyBones.RightUpperArm):null;
+            var elbow=animator?animator.GetBoneTransform(HumanBodyBones.LeftLowerArm):null;
+            var wrist=animator?animator.GetBoneTransform(HumanBodyBones.LeftHand):null;
+            if(!leftShoulder||!elbow||!wrist)return;
+            float arm=Vector3.Distance(leftShoulder.position,elbow.position)+Vector3.Distance(elbow.position,wrist.position);
+            comfort=arm*.80f;reach=arm*.96f;
+        }
         void OnAnimatorIK(int layer)
         {
             if(!animator||!player||!player.combat)return;
@@ -99,12 +112,38 @@ namespace Sumi
             float target=combat.SwordPoseWeight;
             weight=Mathf.MoveTowards(weight,target,Time.deltaTime*(posed?22:14));
             animator.SetIKPositionWeight(AvatarIKGoal.RightHand,weight);animator.SetIKRotationWeight(AvatarIKGoal.RightHand,weight);
-            animator.SetIKPositionWeight(AvatarIKGoal.LeftHand,weight*.9f);animator.SetIKRotationWeight(AvatarIKGoal.LeftHand,weight*.85f);
             if(posed){combat.GetSwordPose(out lastGrip,out lastLine);poseReady=true;}
-            if(weight<=.001f||!poseReady)return;
+            if(weight<=.001f||!poseReady)
+            {
+                animator.SetIKPositionWeight(AvatarIKGoal.LeftHand,0);animator.SetIKRotationWeight(AvatarIKGoal.LeftHand,0);
+                offHandRelease=0;hiltGrip=GripFar;hiltSlide=0;return;
+            }
+            lastGrip=Settle(lastGrip,rightShoulder,out _);
+            Vector3 leftGrip=OffHand(lastGrip,lastLine,out float strain);
+            offHandRelease=Mathf.MoveTowards(offHandRelease,strain,Time.deltaTime*7f);
+            float offHand=weight*(1-offHandRelease);
+            animator.SetIKPositionWeight(AvatarIKGoal.LeftHand,offHand);animator.SetIKRotationWeight(AvatarIKGoal.LeftHand,offHand*.86f);
             Quaternion rotation=Quaternion.FromToRotation(Vector3.up,lastLine);
             animator.SetIKPosition(AvatarIKGoal.RightHand,lastGrip);animator.SetIKRotation(AvatarIKGoal.RightHand,rotation);
-            animator.SetIKPosition(AvatarIKGoal.LeftHand,lastGrip-lastLine*.15f);animator.SetIKRotation(AvatarIKGoal.LeftHand,rotation);
+            if(offHand>.001f){animator.SetIKPosition(AvatarIKGoal.LeftHand,leftGrip);animator.SetIKRotation(AvatarIKGoal.LeftHand,rotation);}
+        }
+        Vector3 OffHand(Vector3 swordHand,Vector3 bladeLine,out float strain)
+        {
+            if(!leftShoulder){strain=0;return swordHand-bladeLine*GripFar;}
+            Vector3 fromShoulder=swordHand-leftShoulder.position;
+            float along=Vector3.Dot(fromShoulder,bladeLine);
+            float slack=comfort*comfort-fromShoulder.sqrMagnitude+along*along;
+            float span=Mathf.Clamp(slack>0?along+Mathf.Sqrt(slack):along,GripNear,GripFar);
+            hiltGrip=Mathf.SmoothDamp(hiltGrip,span,ref hiltSlide,.05f,Mathf.Infinity,Time.deltaTime);
+            return Settle(swordHand-bladeLine*hiltGrip,leftShoulder,out strain);
+        }
+        Vector3 Settle(Vector3 goal,Transform shoulder,out float strain)
+        {
+            strain=0;if(!shoulder)return goal;
+            Vector3 offset=goal-shoulder.position;float span=offset.magnitude;
+            if(span<.0001f)return goal;
+            strain=Mathf.Clamp01(Mathf.InverseLerp(comfort,reach,span));
+            return span>reach?shoulder.position+offset*(reach/span):goal;
         }
     }
 }

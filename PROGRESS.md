@@ -1,6 +1,14 @@
 # Sumi progress
 
-Updated 2026-09-18. Current milestone: complete WebGL vertical slice and itch.io release candidate.
+Updated 2026-09-19. Current milestone: PR #2 combat/interface refinement.
+
+## 2026-09-19 focused PR #1 highlights
+
+- PR #2 remains the source of truth. No PR #1 combat state machine, posture/mastery rules, duplicate blade rendering, UI, or visual treatment was merged.
+- Lock-on now eases into and out of targets, gives immediate authority to mouse input, retains targets through a wider release radius, releases dead targets, and cycles targets with the mouse wheel.
+- Enemies register in a shared live list. Targeting, attack assist, executions, ink darts, Brush Flash range checks, and local separation no longer scan the full scene every frame.
+- Two-hand sword IK now measures the current rig, keeps both goals inside arm reach, lets the off hand slide along the hilt, and eases its release during extreme cuts.
+- Unity 6000.2.14f1 recompiled successfully. Play Mode initialized the current arena, player, and enemy with no new runtime error in the active Editor log. A fresh WebGL build succeeded and the itch ZIP was regenerated: 30,740,030 compressed bytes, 31,200,656 extracted bytes, 17 files, largest file 20,710,151 bytes, with root `index.html` confirmed. Comparison captures are local under `Review/` and are intentionally excluded from source control.
 
 ## 2026-09-19 combo and interface update
 

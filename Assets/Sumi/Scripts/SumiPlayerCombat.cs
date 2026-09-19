@@ -180,7 +180,7 @@ namespace Sumi
             StartAttack(flash,axis,0);dashAt=-99;nextDashAt=Time.time+.82f;
             dashDir=axis.sqrMagnitude>.02f?player.WorldDirection(axis):strikeDir;
             travelDistance=FlashDistance;
-            foreach(var enemy in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None))
+            foreach(var enemy in SumiEnemy.Active)
             {
                 if(enemy.dead)continue;Vector3 to=enemy.transform.position-transform.position;to.y=0;
                 float distance=to.magnitude;
@@ -200,7 +200,7 @@ namespace Sumi
         SumiEnemy FindAssist(Vector3 direction)
         {
             SumiEnemy best=null;float score=10;
-            foreach(var e in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None))
+            foreach(var e in SumiEnemy.Active)
             {
                 if(e.dead)continue;Vector3 to=e.transform.position-transform.position;to.y=0;
                 float distance=to.magnitude,angle=Vector3.Angle(direction,to);
@@ -301,7 +301,7 @@ namespace Sumi
         void FindExecutionTarget()
         {
             executionTarget=null;float best=2.1f;
-            foreach(var e in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None))
+            foreach(var e in SumiEnemy.Active)
             {
                 if(e.dead||e.health>e.maxHealth*.35f)continue;float distance=Vector3.Distance(transform.position,e.transform.position);
                 if(distance<best&&!Physics.Linecast(transform.position+Vector3.up,e.transform.position+Vector3.up,1<<8)){best=distance;executionTarget=e;}
@@ -316,7 +316,7 @@ namespace Sumi
         void ThrowInk()
         {
             Vector3 direction=TargetDirection();
-            if(!player.target){float best=18;foreach(var e in FindObjectsByType<SumiEnemy>(FindObjectsSortMode.None)){if(e.dead)continue;Vector3 d=e.transform.position-transform.position;d.y=0;float range=d.magnitude;if(range<best&&range>0&&Vector3.Dot(d/range,transform.forward)>.55f){best=range;direction=d/range;}}}
+            if(!player.target){float best=18;foreach(var e in SumiEnemy.Active){if(!e||e.dead)continue;Vector3 d=e.transform.position-transform.position;d.y=0;float range=d.magnitude;if(range<best&&range>0&&Vector3.Dot(d/range,transform.forward)>.55f){best=range;direction=d/range;}}}
             Vector3 origin=transform.position+Vector3.up*1.25f+direction*.5f;
             int count=splitInk?2:1;for(int i=0;i<count;i++){float angle=count==1?0:(i==0?-8:8);Vector3 flight=Quaternion.AngleAxis(angle,Vector3.up)*direction;new GameObject("Ink dart").AddComponent<SumiInkDart>().Init(origin,flight,deepInk?34:22);}
             SumiCombatFeedback.Swing(false);
