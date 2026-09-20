@@ -28,7 +28,7 @@ namespace Sumi
         readonly List<SumiEnemy> enemies=new List<SumiEnemy>();readonly List<int> offered=new List<int>();readonly HashSet<int> chosen=new HashSet<int>();
         readonly HashSet<string> shownHints=new HashSet<string>();
         float nextThreatAt,hintUntil;int lastAttackerId;string combatHint;
-        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNote,wave,pauseTitle,pauseNote,pauseButton;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture;Texture2D[] wheelSegments;
+        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNameLit,wheelNote,wave,pauseNote,menuItem,menuItemLit;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture,sealTexture,paperTexture,vignetteTexture,ensoTexture;
         static readonly Vector3[] Gates={new Vector3(0,0,17.5f),new Vector3(17.5f,0,0),new Vector3(0,0,-17.5f),new Vector3(-17.5f,0,0)};
 
         // Each wave adds pressure using enemies the run has already taught, while the Oni remains
@@ -48,6 +48,9 @@ namespace Sumi
         };
         static readonly string[] UpgradeNames={"RED THREAD","SECOND BREATH","STEADY HEART","SPLIT INK","DEEP INK","QUICK INK"};
         static readonly string[] UpgradeText={"+25 max health","Executions heal 10","Take 20% less damage","Throw two darts","Darts hit harder","Throw more often"};
+        // Letterspaced by hand: IMGUI has no tracking, and emptiness does the rest.
+        const string PauseLine="T H E   C O U R T   H O L D S   I T S   B R E A T H";
+        const string ChoosePrompt="C H O O S E   O N E   S T R O K E";
 
         public void Init(SumiPlayer p){player=p;stateAt=Time.unscaledTime;bannerUntil=stateAt+2.8f;SumiTime.Reset();playerRenderers=p.GetComponentsInChildren<Renderer>(true);colorBlock=new MaterialPropertyBlock();}
         void Update()
@@ -200,19 +203,24 @@ namespace Sumi
 
         void Styles()
         {
-            if(title!=null&&wave!=null&&pauseButton!=null)return;
+            // Hot reload can keep styles alive while wiping Texture2D fields. Rebuild when any art is gone.
+            bool artReady=paperTexture&&sealTexture&&vignetteTexture&&ensoTexture;
+            if(title!=null&&wave!=null&&menuItem!=null&&artReady)return;
             Font font=Resources.Load<Font>("Fonts/JiayouAkira-MAVEY");
             title=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.052f)};title.normal.textColor=new Color(.07f,.055f,.05f);
             small=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.020f)};
             hud=new GUIStyle(small);hud.normal.textColor=new Color(.08f,.07f,.065f);
             card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.025f)};card.normal.textColor=new Color(.07f,.05f,.04f);
             center=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.028f)};
-            wheelName=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.027f)};wheelName.normal.textColor=Color.white;
-            wheelNote=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.017f)};wheelNote.normal.textColor=Color.white;
+            // Ofuda text: dark ink on paper.
+            wheelName=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.034f),wordWrap=true,alignment=TextAnchor.UpperCenter};wheelName.normal.textColor=new Color(.055f,.045f,.040f);
+            wheelNameLit=new GUIStyle(wheelName);wheelNameLit.normal.textColor=new Color(.42f,.040f,.055f);
+            wheelNote=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.016f),wordWrap=true,alignment=TextAnchor.UpperCenter};wheelNote.normal.textColor=new Color(.28f,.24f,.21f);
             wave=new GUIStyle(title){alignment=TextAnchor.UpperLeft,fontSize=Mathf.RoundToInt(Screen.height*.040f)};wave.normal.textColor=new Color(.055f,.047f,.043f);
-            pauseTitle=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.066f)};pauseTitle.normal.textColor=new Color(.025f,.021f,.020f);
-            pauseNote=new GUIStyle(small){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.019f)};pauseNote.normal.textColor=new Color(.11f,.095f,.082f);
-            pauseButton=new GUIStyle(GUIStyle.none){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.025f)};pauseButton.normal.textColor=new Color(.92f,.89f,.80f);
+            // Pause sits on a dark wash, so the line and choices read as pale ink.
+            pauseNote=new GUIStyle(small){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.022f)};pauseNote.normal.textColor=new Color(.86f,.82f,.72f);
+            menuItem=new GUIStyle(title){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.038f)};menuItem.normal.textColor=new Color(.62f,.58f,.50f);
+            menuItemLit=new GUIStyle(menuItem);menuItemLit.normal.textColor=new Color(.96f,.92f,.82f);
             BuildHudTextures();
         }
         void OnGUI()
@@ -221,23 +229,21 @@ namespace Sumi
             float low=player&&player.combat!=null?Mathf.Clamp01((45-player.combat.health)/45f):0;
             if(low>0||redPulse>0){GUI.color=new Color(.48f,.015f,.02f,Mathf.Max(low*.30f,redPulse*.42f));GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);}
             GUI.color=old;
-            if(player&&player.combat!=null)
+            bool menuOpen=state==SumiRunState.Paused||state==SumiRunState.Upgrade;
+            if(player&&player.combat!=null&&!menuOpen)
             {
-                if(state!=SumiRunState.Upgrade){DrawCombo(w,h);DrawHealth(w,h);}
+                DrawCombo(w,h);DrawHealth(w,h);
                 if(player.combat.ExecutionTarget)GUI.Label(new Rect(w*.37f,h*.69f,w*.26f,42),"E  —  DECISIVE CUT",center);
             }
-            if(state!=SumiRunState.Intro&&state!=SumiRunState.Death&&state!=SumiRunState.Victory)DrawWaveCounter(w,h);
-            if(state!=SumiRunState.Upgrade&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
-            if(Time.unscaledTime<bannerUntil&&state!=SumiRunState.Upgrade)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
+            if(!menuOpen&&state!=SumiRunState.Intro&&state!=SumiRunState.Death&&state!=SumiRunState.Victory)DrawWaveCounter(w,h);
+            if(!menuOpen&&state!=SumiRunState.Upgrade&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
+            if(Time.unscaledTime<bannerUntil&&!menuOpen)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
             if(state==SumiRunState.Intro)GUI.Label(new Rect(w*.2f,h*.89f,w*.6f,25),"F  THROW INK",small);
             if(state==SumiRunState.Intro){GUI.Label(new Rect(w*.2f,h*.73f,w*.6f,h*.16f),"WASD move   •   LMB chain cuts   •   R heavy   •   RMB guard / deflect\nSPACE Brush Flash   •   Q lock   •   E execute",small);}
             if(CombatActive&&Time.time<hintUntil)GUI.Label(new Rect(w*.15f,h*.79f,w*.70f,35),combatHint,small);
             if(CombatActive&&attacker&&attacker.Attacking&&attacker.CurrentAttack!=null)
                 GUI.Label(new Rect(w*.25f,h*.735f,w*.5f,30),attacker.CurrentAttack.unblockable?"CRIMSON SWEEP  —  EVADE":attacker.Braced?"BRACED  —  HEAVY / DEFLECT":attacker.CurrentAttack.name,small);
-            if(state==SumiRunState.Upgrade)
-            {
-                DrawSpellWheel(w,h);
-            }
+            if(state==SumiRunState.Upgrade)DrawSpellWheel(w,h);
             if(state==SumiRunState.Death||state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),state==SumiRunState.Victory?"THE COURT IS QUIET":"YOUR GOLD RETURNS TO PAPER",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  PAINT AGAIN",card))Restart();}
             if(state==SumiRunState.Paused)DrawPauseMenu(w,h);
         }
@@ -251,38 +257,63 @@ namespace Sumi
             GUI.color=old;GUI.Label(r,current+"/"+Waves.Length,counter);
             GUI.color=old;
         }
+        // No panel. No rods. Night wash, one quiet line, two ink choices. Ma does the rest.
         void DrawPauseMenu(float w,float h)
         {
             Color old=GUI.color;
-            GUI.color=new Color(.010f,.010f,.011f,.42f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
-            Rect panel=new Rect(w*.255f,h*.155f,w*.49f,h*.64f);
-            GUI.color=new Color(.020f,.018f,.015f,.24f);GUI.DrawTexture(new Rect(panel.x+14,panel.y+16,panel.width,panel.height),Texture2D.whiteTexture);
-            GUI.color=new Color(.88f,.86f,.77f,.91f);GUI.DrawTexture(panel,Texture2D.whiteTexture);
-            GUI.color=new Color(.98f,.96f,.87f,.38f);GUI.DrawTexture(new Rect(panel.x+18,panel.y+18,panel.width-36,panel.height-36),Texture2D.whiteTexture);
-            BrushLine(panel.x+24,panel.y+28,panel.width-48,8,new Color(.035f,.031f,.029f,.74f));
-            BrushLine(panel.x+36,panel.y+panel.height-40,panel.width-72,5,new Color(.035f,.031f,.029f,.56f));
-            BrushLine(panel.x+panel.width-42,panel.y+48,6,panel.height-96,new Color(.035f,.031f,.029f,.40f));
+            GUI.color=new Color(.010f,.010f,.012f,.58f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.72f));
+            float lineY=h*.22f;
             GUI.color=old;
-            GUI.Label(new Rect(panel.x+40,panel.y+78,panel.width-80,76),"STILLNESS",pauseTitle??title??GUI.skin.label);
-            GUI.Label(new Rect(panel.x+48,panel.y+150,panel.width-96,34),"THE COURT HOLDS ITS BREATH",pauseNote??small??GUI.skin.label);
-            if(PauseButton(new Rect(panel.x+panel.width*.28f,panel.y+panel.height*.49f,panel.width*.44f,50),"RESUME"))TogglePause();
-            if(PauseButton(new Rect(panel.x+panel.width*.25f,panel.y+panel.height*.64f,panel.width*.50f,50),"RESTART RUN"))Restart();
+            GUI.Label(new Rect(w*.08f,lineY,w*.84f,42),PauseLine,pauseNote??small??GUI.skin.label);
+            InkRule(w*.32f,lineY+46,w*.36f,2.2f,new Color(.86f,.82f,.72f,.38f));
+            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f,iy=h*.48f;
+            if(PauseChoice(new Rect(ix,iy,iw,ih),"RESUME"))TogglePause();
+            if(PauseChoice(new Rect(ix,iy+ih*1.45f,iw,ih),"RESTART RUN"))Restart();
+            float sig=Mathf.Max(22,h*.032f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.88f,sig,sig),new Color(.72f,.055f,.075f,.78f));
             GUI.color=old;
         }
-        void BrushLine(float x,float y,float width,float height,Color color)
-        {
-            Color old=GUI.color;GUI.color=color;GUI.DrawTexture(new Rect(x,y,width,height),Texture2D.whiteTexture);
-            GUI.color=new Color(color.r,color.g,color.b,color.a*.45f);GUI.DrawTexture(new Rect(x+width*.06f,y-height*.85f,width*.82f,height*.55f),Texture2D.whiteTexture);
-            GUI.color=old;
-        }
-        bool PauseButton(Rect r,string label)
+        bool PauseChoice(Rect r,string label)
         {
             Color old=GUI.color;bool hover=r.Contains(Event.current.mousePosition);
-            GUI.color=new Color(.015f,.014f,.013f,.55f);GUI.DrawTexture(new Rect(r.x+5,r.y+6,r.width,r.height),Texture2D.whiteTexture);
-            GUI.color=hover?new Color(.38f,.055f,.050f,.88f):new Color(.050f,.045f,.041f,.86f);GUI.DrawTexture(r,Texture2D.whiteTexture);
-            BrushLine(r.x+10,r.y+7,r.width-20,3,hover?new Color(.92f,.78f,.62f,.55f):new Color(.78f,.72f,.61f,.35f));
-            GUI.color=old;GUI.Label(r,label,pauseButton);
-            bool clicked=GUI.Button(r,GUIContent.none,GUIStyle.none);GUI.color=old;return clicked;
+            if(hover)
+            {
+                float seal=Mathf.Max(16,r.height*.42f);
+                Tex(sealTexture,new Rect(r.x-seal*1.35f,r.y+(r.height-seal)*.5f,seal,seal),new Color(.74f,.055f,.078f,.95f));
+            }
+            GUI.color=old;
+            GUI.Label(r,label,(hover?menuItemLit:menuItem)??title??GUI.skin.label);
+            InkRule(r.x+r.width*(hover?.05f:.28f),r.y+r.height*.82f,r.width*(hover?.90f:.44f),hover?2.8f:1.5f,new Color(.86f,.82f,.72f,hover?.72f:.22f));
+            return GUI.Button(r,GUIContent.none,GUIStyle.none);
+        }
+        // A drawn rule rather than a rectangle: the brush presses down, holds, then lifts dry.
+        void InkRule(float x,float y,float width,float thickness,Color color)
+        {
+            Color old=GUI.color;const int Steps=22;
+            for(int i=0;i<Steps;i++)
+            {
+                float t=i/(float)(Steps-1),fade=Mathf.Sin(Mathf.PI*Mathf.Pow(t,.78f));
+                GUI.color=new Color(color.r,color.g,color.b,color.a*Mathf.Clamp01(.18f+fade*.95f));
+                GUI.DrawTexture(new Rect(x+width*t,y,width/Steps+1.2f,thickness*(.40f+fade*.80f)),Texture2D.whiteTexture);
+            }
+            GUI.color=old;
+        }
+        void InkColumn(float x,float y,float height,float thickness,Color color)
+        {
+            Color old=GUI.color;const int Steps=24;
+            for(int i=0;i<Steps;i++)
+            {
+                float t=i/(float)(Steps-1),fade=Mathf.Sin(Mathf.PI*Mathf.Pow(t,.78f));
+                GUI.color=new Color(color.r,color.g,color.b,color.a*Mathf.Clamp01(.18f+fade*.95f));
+                GUI.DrawTexture(new Rect(x-thickness*(.40f+fade*.80f)*.5f,y+height*t,thickness*(.40f+fade*.80f),height/Steps+1.2f),Texture2D.whiteTexture);
+            }
+            GUI.color=old;
+        }
+        static void Tex(Texture2D texture,Rect r,Color tint)
+        {
+            if(!texture)return;
+            Color old=GUI.color;GUI.color=tint;GUI.DrawTexture(r,texture);GUI.color=old;
         }
         void DrawCombo(float w,float h)
         {
@@ -314,44 +345,139 @@ namespace Sumi
             if(enemy.Attacking&&enemy.CurrentAttack!=null)
                 GUI.Label(new Rect(x,y+15,width,50),enemy.CurrentAttack.unblockable?"CRIMSON SWEEP\nEVADE":enemy.Braced?"BRACED\nHEAVY / DEFLECT":enemy.CurrentAttack.name,hud);
         }
+        // Three ofuda slips instead of a pie chart. Empty night behind them; vermillion marks the chosen one.
         void DrawSpellWheel(float w,float h)
         {
             FillOffers();
-            Color old=GUI.color;GUI.color=new Color(.015f,.013f,.014f,.52f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);GUI.color=old;
-            float size=Mathf.Min(w*.44f,h*.68f),cx=w*.5f,cy=h*.52f;Rect wheel=new Rect(cx-size*.5f,cy-size*.5f,size,size);
-            Vector2 pointer=Event.current.mousePosition-new Vector2(cx,cy);float radius=pointer.magnitude;
-            // A late wheel can run short of unchosen spells, so every sector is gated on an offer.
+            Color old=GUI.color;
+            GUI.color=new Color(.012f,.011f,.013f,.58f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.70f));
+            float ring=Mathf.Min(w,h)*.72f;
+            Tex(ensoTexture,new Rect((w-ring)*.5f,(h-ring)*.52f,ring,ring),new Color(.92f,.88f,.78f,.14f));
+            GUI.color=old;
+            GUI.Label(new Rect(w*.1f,h*.08f,w*.8f,36),ChoosePrompt,pauseNote??small??GUI.skin.label);
+            InkRule(w*.38f,h*.08f+40,w*.24f,2f,new Color(.86f,.82f,.72f,.32f));
             int filled=Mathf.Min(3,offered.Count);
-            int hover=-1;if(radius>size*.10f&&radius<size*.48f){float a=(Mathf.Atan2(pointer.y,pointer.x)*Mathf.Rad2Deg+150+360)%360;hover=Mathf.FloorToInt(a/120);if(hover>=filled)hover=-1;}
-            for(int i=0;i<3;i++){GUI.color=i==hover?new Color(.68f,.07f,.10f):new Color(.045f,.040f,.044f);GUI.DrawTexture(wheel,wheelSegments[i]);}
-            GUI.color=new Color(.025f,.023f,.026f,.98f);GUI.DrawTexture(new Rect(cx-size*.11f,cy-size*.11f,size*.22f,size*.22f),pipTexture);GUI.color=old;
+            float slipW=Mathf.Clamp(w*.17f,150,230),slipH=Mathf.Clamp(h*.52f,320,520),gap=Mathf.Clamp(w*.035f,24,48);
+            float total=filled*slipW+(filled-1)*gap,x0=(w-total)*.5f,y0=h*.22f;
+            int hover=-1;
             for(int i=0;i<filled;i++)
             {
-                float angle=(-90+i*120)*Mathf.Deg2Rad;Vector2 point=new Vector2(cx+Mathf.Cos(angle)*size*.31f,cy+Mathf.Sin(angle)*size*.31f);
-                GUI.Label(new Rect(point.x-size*.23f,point.y-36,size*.46f,48),UpgradeNames[offered[i]],wheelName);
-                GUI.Label(new Rect(point.x-size*.23f,point.y+10,size*.46f,31),UpgradeText[offered[i]],wheelNote);
+                Rect slip=new Rect(x0+i*(slipW+gap),y0,slipW,slipH);
+                if(slip.Contains(Event.current.mousePosition))hover=i;
+                DrawOfuda(slip,UpgradeNames[offered[i]],UpgradeText[offered[i]],i==hover);
+                if(Event.current.type==EventType.MouseDown&&Event.current.button==0&&i==hover){Choose(i);Event.current.Use();}
             }
             GUI.color=old;
-            if(Event.current.type==EventType.MouseDown&&Event.current.button==0&&hover>=0){Choose(hover);Event.current.Use();}
+        }
+        void DrawOfuda(Rect slip,string name,string note,bool lit)
+        {
+            Color old=GUI.color;
+            Tex(paperTexture,new Rect(slip.x+6,slip.y+10,slip.width,slip.height),new Color(.02f,.018f,.015f,.28f));
+            Tex(paperTexture,slip,lit?new Color(.96f,.93f,.84f,.98f):new Color(.90f,.875f,.80f,.94f));
+            if(lit)InkColumn(slip.x+10,slip.y+18,slip.height-36,4.5f,new Color(.70f,.050f,.070f,.88f));
+            else InkColumn(slip.x+slip.width*.5f,slip.y+18,slip.height*.12f,2f,new Color(.08f,.07f,.06f,.45f));
+            float nameH=slip.height*.22f;
+            GUI.Label(new Rect(slip.x+10,slip.y+slip.height*.18f,slip.width-20,nameH),name,lit?wheelNameLit:wheelName);
+            InkRule(slip.x+slip.width*.18f,slip.y+slip.height*.42f,slip.width*.64f,1.8f,new Color(.08f,.07f,.06f,lit?.55f:.28f));
+            GUI.Label(new Rect(slip.x+12,slip.y+slip.height*.48f,slip.width-24,slip.height*.28f),note,wheelNote);
+            if(lit)
+            {
+                float seal=Mathf.Max(18,slip.width*.18f);
+                Tex(sealTexture,new Rect(slip.xMax-seal-14,slip.yMax-seal-18,seal,seal),new Color(.72f,.055f,.075f,.92f));
+            }
+            GUI.color=old;
         }
         void BuildHudTextures()
         {
+            if(pipTexture)Destroy(pipTexture);if(barTexture)Destroy(barTexture);
+            if(sealTexture)Destroy(sealTexture);if(paperTexture)Destroy(paperTexture);
+            if(vignetteTexture)Destroy(vignetteTexture);if(ensoTexture)Destroy(ensoTexture);
             pipTexture=new Texture2D(48,48,TextureFormat.RGBA32,false);pipTexture.filterMode=FilterMode.Bilinear;
             for(int y=0;y<48;y++)for(int x=0;x<48;x++){float r=Vector2.Distance(new Vector2(x,y),new Vector2(23.5f,23.5f));float alpha=Mathf.Clamp01((23-r)*.75f);pipTexture.SetPixel(x,y,new Color(1,1,1,alpha));}pipTexture.Apply();
             barTexture=new Texture2D(256,1,TextureFormat.RGBA32,false);barTexture.filterMode=FilterMode.Bilinear;
             for(int x=0;x<256;x++){float t=x/255f;barTexture.SetPixel(x,0,Color.Lerp(new Color(.76f,.13f,.18f),new Color(.055f,.015f,.025f),Mathf.SmoothStep(0,1,Mathf.Clamp01((t-.65f)/.35f))));}barTexture.Apply();
-            wheelSegments=new Texture2D[3];for(int i=0;i<3;i++){wheelSegments[i]=new Texture2D(384,384,TextureFormat.RGBA32,false);wheelSegments[i].filterMode=FilterMode.Bilinear;}
-            for(int y=0;y<384;y++)for(int x=0;x<384;x++)
-            {
-                float dx=x-191.5f,dy=191.5f-y,r=Mathf.Sqrt(dx*dx+dy*dy)/384f;
-                float a=(Mathf.Atan2(dy,dx)*Mathf.Rad2Deg+150+360)%360;
-                int sector=Mathf.FloorToInt(a/120);float local=a%120,edge=Mathf.Min(local,120-local);
-                float alpha=Mathf.Clamp01((r-.105f)*180)*Mathf.Clamp01((.49f-r)*180)*Mathf.Clamp01((edge-1.3f)*.6f);
-                for(int i=0;i<3;i++)wheelSegments[i].SetPixel(x,y,new Color(1,1,1,i==sector?alpha:0));
-            }
-            foreach(var segment in wheelSegments)segment.Apply();
+            BuildSeal();BuildPaper();BuildVignette();BuildEnso();
         }
-        void OnDestroy(){if(pipTexture)Destroy(pipTexture);if(barTexture)Destroy(barTexture);if(wheelSegments!=null)foreach(var segment in wheelSegments)if(segment)Destroy(segment);}
+        // Deterministic value noise. The menus should look hand-made but rebuild identically.
+        static float Noise(float x,float y){float n=Mathf.Sin(x*12.9898f+y*78.233f)*43758.5453f;return n-Mathf.Floor(n);}
+        static float Fbm(float x,float y)=>Noise(x,y)*.55f+Noise(x*2.3f+11.7f,y*2.3f-4.1f)*.30f+Noise(x*5.1f-3.3f,y*5.1f+8.8f)*.15f;
+        // One incomplete enso behind the ofuda: a single brush circle that never quite closes.
+        void BuildEnso()
+        {
+            const int S=384;float c=(S-1)*.5f;var pixels=new Color[S*S];
+            for(int y=0;y<S;y++)for(int x=0;x<S;x++)
+            {
+                float dx=x-c,dy=c-y,r=Mathf.Sqrt(dx*dx+dy*dy)/S;
+                float ang=(Mathf.Atan2(dy,dx)*Mathf.Rad2Deg+360)%360,t=ang/360f;
+                float band=.34f+.01f*Mathf.Sin(t*8.1f);
+                float swell=Mathf.Pow(Mathf.Max(0,Mathf.Sin(Mathf.PI*Mathf.Pow(Mathf.Clamp01((t-.04f)/.88f),.82f))),.55f);
+                float width=(.018f*swell+.0025f)*(1f-.35f*t);
+                float alpha=0;
+                if(t>.04f&&t<.94f)
+                {
+                    alpha=Mathf.Clamp01(1f-(Mathf.Abs(r-band)-width*.45f)/Mathf.Max(width*.55f,.0001f));
+                    alpha*=Mathf.Clamp01(.55f+Fbm(ang*.5f,r*90f)*.8f);
+                    alpha*=1f-.5f*Mathf.Clamp01((Fbm(t*30f,r*140f)-.62f)*3.2f);
+                    alpha*=Mathf.Clamp01(1.05f-.55f*t*t);
+                }
+                pixels[y*S+x]=new Color(1,1,1,Mathf.Clamp01(alpha));
+            }
+            ensoTexture=new Texture2D(S,S,TextureFormat.RGBA32,false){filterMode=FilterMode.Bilinear,wrapMode=TextureWrapMode.Clamp};
+            ensoTexture.SetPixels(pixels);ensoTexture.Apply();
+        }
+        // A carved stone seal: solid block, two cut strokes, edges eaten away by the stone.
+        void BuildSeal()
+        {
+            const int S=128;var pixels=new Color[S*S];
+            for(int y=0;y<S;y++)for(int x=0;x<S;x++)
+            {
+                float u=x/(float)(S-1),v=y/(float)(S-1);
+                float alpha=u>.07f&&u<.93f&&v>.07f&&v<.93f?1:0;
+                bool cut=(v>.44f&&v<.55f&&u>.19f&&u<.81f)||(u>.45f&&u<.56f&&v>.21f&&v<.79f)||(v>.70f&&v<.78f&&u>.27f&&u<.73f);
+                if(cut)alpha=0;
+                alpha*=Mathf.Clamp01(.55f+Fbm(u*9f,v*9f)*.95f);
+                float edge=Mathf.Min(Mathf.Min(u,1-u),Mathf.Min(v,1-v));
+                alpha*=Mathf.Clamp01((edge-.045f)*26f+Fbm(u*22f,v*22f)*.70f);
+                pixels[y*S+x]=new Color(1,1,1,Mathf.Clamp01(alpha));
+            }
+            sealTexture=new Texture2D(S,S,TextureFormat.RGBA32,false){filterMode=FilterMode.Bilinear,wrapMode=TextureWrapMode.Clamp};
+            sealTexture.SetPixels(pixels);sealTexture.Apply();
+        }
+        // Handmade sheet: fibres in the tone, and a deckle edge that wanders down both sides.
+        void BuildPaper()
+        {
+            const int W=128,H=384;var pixels=new Color[W*H];
+            for(int y=0;y<H;y++)
+            {
+                float left=1.4f+Fbm(y*.090f,3.1f)*4.2f,right=W-1.4f-Fbm(y*.085f,17.7f)*4.2f;
+                for(int x=0;x<W;x++)
+                {
+                    float alpha=Mathf.Clamp01((x-left)*1.5f)*Mathf.Clamp01((right-x)*1.5f);
+                    float fibre=.90f+Fbm(x*.28f,y*.070f)*.18f;
+                    pixels[y*W+x]=new Color(fibre,fibre,fibre,alpha);
+                }
+            }
+            paperTexture=new Texture2D(W,H,TextureFormat.RGBA32,false){filterMode=FilterMode.Bilinear,wrapMode=TextureWrapMode.Clamp};
+            paperTexture.SetPixels(pixels);paperTexture.Apply();
+        }
+        void BuildVignette()
+        {
+            const int S=128;var pixels=new Color[S*S];
+            for(int y=0;y<S;y++)for(int x=0;x<S;x++)
+            {
+                float u=x/(float)(S-1)*2-1,v=y/(float)(S-1)*2-1;
+                pixels[y*S+x]=new Color(1,1,1,Mathf.Pow(Mathf.Clamp01(Mathf.Sqrt(u*u+v*v)*.72f),2.1f));
+            }
+            vignetteTexture=new Texture2D(S,S,TextureFormat.RGBA32,false){filterMode=FilterMode.Bilinear,wrapMode=TextureWrapMode.Clamp};
+            vignetteTexture.SetPixels(pixels);vignetteTexture.Apply();
+        }
+        void OnDestroy()
+        {
+            if(pipTexture)Destroy(pipTexture);if(barTexture)Destroy(barTexture);
+            if(sealTexture)Destroy(sealTexture);if(paperTexture)Destroy(paperTexture);
+            if(vignetteTexture)Destroy(vignetteTexture);if(ensoTexture)Destroy(ensoTexture);
+        }
     }
 
 }
