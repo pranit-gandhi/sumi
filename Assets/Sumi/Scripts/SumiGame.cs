@@ -6,6 +6,7 @@ namespace Sumi
     public class SumiGame : MonoBehaviour
     {
         public static SumiGame I; public SumiConfig config;public SumiPlayer player; public SumiCamera view;public SumiRunDirector run;
+        AudioSource music;bool musicPaused;
         void Awake()
         {
             I=this;Application.targetFrameRate=60;QualitySettings.vSyncCount=0;
@@ -19,6 +20,8 @@ namespace Sumi
             // and occasional close-up snaps when the hand-authored framing moved.
             view.virtualCamera=null;
             run=gameObject.AddComponent<SumiRunDirector>();run.Init(player);
+            var track=Resources.Load<AudioClip>("Sumi/Audio/Samurai");
+            if(track){music=gameObject.AddComponent<AudioSource>();music.clip=track;music.loop=true;music.playOnAwake=false;music.spatialBlend=0;music.volume=.22f;music.Play();}
             Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
         }
         // Acquisition stays tighter than the range a held lock survives, so a foe drifting around
@@ -27,6 +30,7 @@ namespace Sumi
         void Update()
         {
             SumiCombatFeedback.Tick();
+            if(music&&run.Paused!=musicPaused){musicPaused=run.Paused;if(musicPaused)music.Pause();else music.UnPause();}
             var keyboard=UnityEngine.InputSystem.Keyboard.current;
             if(keyboard?.qKey.wasPressedThisFrame==true){if(player.locked)ReleaseLock();else SelectTarget(0);}
             var mouse=UnityEngine.InputSystem.Mouse.current;

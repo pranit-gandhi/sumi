@@ -47,7 +47,29 @@ The editor menu **Sumi ? Author Combat Clips** creates missing definitions and a
 
 ## Limits and next tuning pass
 
-The project still has one licensed base sword attack clip. Distinct arm/blade curves and timing make the attacks different, but bespoke full-body attack and transition clips would improve hips, foot planting and weight transfer further. Existing enemy attack animation timing remains a separate future polish area. This is an authored melee sweep, not a physical sword-on-sword simulation. A human play session must judge rhythm, spacing and satisfaction. Existing WebGL/itch packages need rebuilding to include these changes.
+The project still has one licensed base sword attack clip. Player and enemy arm/blade curves and timing make attacks different, but bespoke full-body attack and transition clips would improve hips, foot planting and weight transfer further. Player contacts use swept blade samples; enemy contacts use the warned attack sector during its active window. This is not a physical sword-on-sword simulation. A human play session must judge rhythm, spacing and satisfaction. Existing WebGL/itch packages need rebuilding to include these changes.
+
+## Enemy challenge update — 2026-09-20
+
+Enemies now ask for different responses while retaining the health-only player rules:
+
+- **Ashen Retainer (90 health):** two cuts with a readable return, then an occasional slower braced overhead. A clean light chain deals 86 damage and opens an execution rather than killing outright.
+- **Ink Shade (64 health):** faster approach and lateral movement, a narrow lunging attack, then a diagonal retreat. Its low health rewards catching it before it escapes.
+- **Painted Oni (340 health):** alternates a cut, crimson sweep and delayed overhead. At 55% health it transitions into a second phase at the next safe opening, adds a return cut, and reduces idle time. Execution becomes available at 12% health so the finale is played out.
+
+Black ground strokes mark ordinary attacks. Gold strokes and the overhead pose mark bracing: light hits still deal full damage, but a heavy cut is needed to interrupt the windup. Perfect deflection interrupts every blockable strike, including a braced strike, deals 12 damage and grants a 0.95-second opening. A held frontal guard instead takes 18% chip damage and does not hurt or recoil the attacker; Steady Heart also reduces chip damage.
+
+The broad crimson fan marks a sweep that must be evaded with Brush Flash or by leaving its reach. It cannot be blocked or deflected. The warning stops tracking before the strike; the locked enemy HUD and first-use hints explain the response in text as well as color. Attack timing, hand IK, the actual katana and trails share `SumiEnemyAttack` definitions. Heavy cuts break braced windups; once released, braced attacks must be defended or evaded. Repeated hits do not restart an existing recoil or recovery window.
+
+Groups still limit melee to one committed attacker, including its return cut. Permission passes at the start of recovery, so another enemy can prepare while the first recovers. Selection favors another ready enemy and checks screen visibility and line of sight. Faster approach, orbiting and separation keep waiting enemies active. Wave-two arrows reserve their own turn in the same threat budget. The Oni encounter focuses on its own patterns. Arrow warnings freeze during pause and hit stop.
+
+Tuning lives in `Assets/Sumi/Scripts/SumiEnemyAttack.cs` (named attacks), `SumiEnemy.cs` (health, reactions and movement), and `SumiRun.cs` (group pressure). Timings are prototype choices, not universal reaction-time targets.
+
+### Repeatable verification
+
+With `SumiShrine` in Play Mode, use **Sumi → Verify Enemy Combat (Play Mode)** or `python Tools/editor.py SumiCombatVerification.Run`. The checks exercise actual runtime objects, timed group attacks, guard/deflection/interrupt rules, hazards, phase changes and run progression. Results go to `Logs/combat-verification.txt`. Stop Play Mode afterwards; this deliberately manipulates the current run.
+
+For human balance review, compare aggressive light-combo play, patient deflection/heavy play and repeated Flash use. Check that an experienced player can identify each hit's cause, earn a full punish after a deflection, and distinguish the return cut from an opening. Watch for enemies spending too long outside the camera, unclear sweep boundaries or a strategy that wins every encounter without adjustment.
 
 ## Sources reviewed
 

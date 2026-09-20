@@ -1,6 +1,16 @@
 # Sumi handoff
 
-Updated 2026-09-19 on PR #2 (`review/sumi-release`).
+Updated 2026-09-20. Enemy combat challenge work follows the PR #2 combat/interface baseline.
+
+## Current enemy combat update
+
+Enemy behavior now lives in `Assets/Sumi/Scripts/SumiEnemy.cs`, with shared attack timing in `SumiEnemyAttack.cs` and hand/katana posing in `SumiEnemyBlade.cs`. Retainers have 90 health and two-cut/braced attacks; Shades have 64 health and lunge/retreat movement. The 340-health Oni has three patterns, awakens at 55% health and becomes executable at 12%.
+
+Held guard takes 18% chip and does not stagger enemies. Perfect deflection stops blockable strikes, deals 12 damage and grants a 0.95-second opening. Heavy cuts interrupt braced windups; crimson sweeps must be evaded. Groups pass attack permission during recovery and account for screen visibility; wave-two arrows reserve their own turn. Arrow warnings and enemies freeze immediately during hit stop.
+
+Unity compilation and 34 runtime checks passed, including real blade contact, enemy sequences, group attacks, phase rules and the entire run state flow through restart. Run **Sumi → Verify Enemy Combat (Play Mode)** from `SumiShrine`; inspect `Logs/combat-verification.txt`, then stop Play Mode. The checks intentionally manipulate the run. Human balance judgment is still needed. Existing WebGL packages predate this update. Details are in `COMBAT.md`.
+
+Earlier handoff sections below record the previous release and may describe superseded rules.
 
 ## Current PR #2 refinement
 
