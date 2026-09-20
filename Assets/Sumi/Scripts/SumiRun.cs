@@ -28,7 +28,7 @@ namespace Sumi
         readonly List<SumiEnemy> enemies=new List<SumiEnemy>();readonly List<int> offered=new List<int>();readonly HashSet<int> chosen=new HashSet<int>();
         readonly HashSet<string> shownHints=new HashSet<string>();
         float nextThreatAt,hintUntil;int lastAttackerId;string combatHint;
-        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNote;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture;Texture2D[] wheelSegments;
+        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNote,wave,pauseTitle,pauseNote,pauseButton;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture;Texture2D[] wheelSegments;
         static readonly Vector3[] Gates={new Vector3(0,0,17.5f),new Vector3(17.5f,0,0),new Vector3(0,0,-17.5f),new Vector3(-17.5f,0,0)};
 
         // Each wave adds pressure using enemies the run has already taught, while the Oni remains
@@ -200,7 +200,7 @@ namespace Sumi
 
         void Styles()
         {
-            if(title!=null)return;
+            if(title!=null&&wave!=null&&pauseButton!=null)return;
             Font font=Resources.Load<Font>("Fonts/JiayouAkira-MAVEY");
             title=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.052f)};title.normal.textColor=new Color(.07f,.055f,.05f);
             small=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.020f)};
@@ -209,6 +209,10 @@ namespace Sumi
             center=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.028f)};
             wheelName=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.027f)};wheelName.normal.textColor=Color.white;
             wheelNote=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.017f)};wheelNote.normal.textColor=Color.white;
+            wave=new GUIStyle(title){alignment=TextAnchor.UpperLeft,fontSize=Mathf.RoundToInt(Screen.height*.040f)};wave.normal.textColor=new Color(.055f,.047f,.043f);
+            pauseTitle=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.066f)};pauseTitle.normal.textColor=new Color(.025f,.021f,.020f);
+            pauseNote=new GUIStyle(small){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.019f)};pauseNote.normal.textColor=new Color(.11f,.095f,.082f);
+            pauseButton=new GUIStyle(GUIStyle.none){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.025f)};pauseButton.normal.textColor=new Color(.92f,.89f,.80f);
             BuildHudTextures();
         }
         void OnGUI()
@@ -235,12 +239,50 @@ namespace Sumi
                 DrawSpellWheel(w,h);
             }
             if(state==SumiRunState.Death||state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),state==SumiRunState.Victory?"THE COURT IS QUIET":"YOUR GOLD RETURNS TO PAPER",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  PAINT AGAIN",card))Restart();}
-            if(state==SumiRunState.Paused){GUI.color=new Color(.88f,.87f,.82f,.93f);GUI.DrawTexture(new Rect(w*.31f,h*.27f,w*.38f,h*.40f),Texture2D.whiteTexture);GUI.color=old;GUI.Label(new Rect(w*.32f,h*.31f,w*.36f,60),"STILLNESS",title);if(GUI.Button(new Rect(w*.40f,h*.46f,w*.20f,45),"RESUME",card))TogglePause();if(GUI.Button(new Rect(w*.40f,h*.55f,w*.20f,45),"RESTART RUN",card))Restart();}
+            if(state==SumiRunState.Paused)DrawPauseMenu(w,h);
         }
         void DrawWaveCounter(float w,float h)
         {
             int current=Mathf.Clamp(waveIndex,1,Waves.Length);
-            GUI.Label(new Rect(w*.035f,h*.075f,120,28),current+"/"+Waves.Length,hud);
+            GUIStyle counter=wave??hud??GUI.skin.label;
+            Color old=GUI.color;Rect r=new Rect(w*.035f,h*.046f,180,60);
+            GUI.color=new Color(.92f,.89f,.80f,.22f);GUI.DrawTexture(new Rect(r.x-8,r.y+6,96,4),Texture2D.whiteTexture);
+            GUI.color=new Color(.012f,.011f,.010f,.18f);GUI.Label(new Rect(r.x+2,r.y+2,r.width,r.height),current+"/"+Waves.Length,counter);
+            GUI.color=old;GUI.Label(r,current+"/"+Waves.Length,counter);
+            GUI.color=old;
+        }
+        void DrawPauseMenu(float w,float h)
+        {
+            Color old=GUI.color;
+            GUI.color=new Color(.010f,.010f,.011f,.42f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Rect panel=new Rect(w*.255f,h*.155f,w*.49f,h*.64f);
+            GUI.color=new Color(.020f,.018f,.015f,.24f);GUI.DrawTexture(new Rect(panel.x+14,panel.y+16,panel.width,panel.height),Texture2D.whiteTexture);
+            GUI.color=new Color(.88f,.86f,.77f,.91f);GUI.DrawTexture(panel,Texture2D.whiteTexture);
+            GUI.color=new Color(.98f,.96f,.87f,.38f);GUI.DrawTexture(new Rect(panel.x+18,panel.y+18,panel.width-36,panel.height-36),Texture2D.whiteTexture);
+            BrushLine(panel.x+24,panel.y+28,panel.width-48,8,new Color(.035f,.031f,.029f,.74f));
+            BrushLine(panel.x+36,panel.y+panel.height-40,panel.width-72,5,new Color(.035f,.031f,.029f,.56f));
+            BrushLine(panel.x+panel.width-42,panel.y+48,6,panel.height-96,new Color(.035f,.031f,.029f,.40f));
+            GUI.color=old;
+            GUI.Label(new Rect(panel.x+40,panel.y+78,panel.width-80,76),"STILLNESS",pauseTitle??title??GUI.skin.label);
+            GUI.Label(new Rect(panel.x+48,panel.y+150,panel.width-96,34),"THE COURT HOLDS ITS BREATH",pauseNote??small??GUI.skin.label);
+            if(PauseButton(new Rect(panel.x+panel.width*.28f,panel.y+panel.height*.49f,panel.width*.44f,50),"RESUME"))TogglePause();
+            if(PauseButton(new Rect(panel.x+panel.width*.25f,panel.y+panel.height*.64f,panel.width*.50f,50),"RESTART RUN"))Restart();
+            GUI.color=old;
+        }
+        void BrushLine(float x,float y,float width,float height,Color color)
+        {
+            Color old=GUI.color;GUI.color=color;GUI.DrawTexture(new Rect(x,y,width,height),Texture2D.whiteTexture);
+            GUI.color=new Color(color.r,color.g,color.b,color.a*.45f);GUI.DrawTexture(new Rect(x+width*.06f,y-height*.85f,width*.82f,height*.55f),Texture2D.whiteTexture);
+            GUI.color=old;
+        }
+        bool PauseButton(Rect r,string label)
+        {
+            Color old=GUI.color;bool hover=r.Contains(Event.current.mousePosition);
+            GUI.color=new Color(.015f,.014f,.013f,.55f);GUI.DrawTexture(new Rect(r.x+5,r.y+6,r.width,r.height),Texture2D.whiteTexture);
+            GUI.color=hover?new Color(.38f,.055f,.050f,.88f):new Color(.050f,.045f,.041f,.86f);GUI.DrawTexture(r,Texture2D.whiteTexture);
+            BrushLine(r.x+10,r.y+7,r.width-20,3,hover?new Color(.92f,.78f,.62f,.55f):new Color(.78f,.72f,.61f,.35f));
+            GUI.color=old;GUI.Label(r,label,pauseButton);
+            bool clicked=GUI.Button(r,GUIContent.none,GUIStyle.none);GUI.color=old;return clicked;
         }
         void DrawCombo(float w,float h)
         {
