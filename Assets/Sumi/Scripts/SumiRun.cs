@@ -222,6 +222,7 @@ namespace Sumi
                 if(state!=SumiRunState.Upgrade){DrawCombo(w,h);DrawHealth(w,h);}
                 if(player.combat.ExecutionTarget)GUI.Label(new Rect(w*.37f,h*.69f,w*.26f,42),"E  —  DECISIVE CUT",center);
             }
+            if(state!=SumiRunState.Intro&&state!=SumiRunState.Death&&state!=SumiRunState.Victory)DrawWaveCounter(w,h);
             if(state!=SumiRunState.Upgrade&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
             if(Time.unscaledTime<bannerUntil&&state!=SumiRunState.Upgrade)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
             if(state==SumiRunState.Intro)GUI.Label(new Rect(w*.2f,h*.89f,w*.6f,25),"F  THROW INK",small);
@@ -236,22 +237,25 @@ namespace Sumi
             if(state==SumiRunState.Death||state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),state==SumiRunState.Victory?"THE COURT IS QUIET":"YOUR GOLD RETURNS TO PAPER",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  PAINT AGAIN",card))Restart();}
             if(state==SumiRunState.Paused){GUI.color=new Color(.88f,.87f,.82f,.93f);GUI.DrawTexture(new Rect(w*.31f,h*.27f,w*.38f,h*.40f),Texture2D.whiteTexture);GUI.color=old;GUI.Label(new Rect(w*.32f,h*.31f,w*.36f,60),"STILLNESS",title);if(GUI.Button(new Rect(w*.40f,h*.46f,w*.20f,45),"RESUME",card))TogglePause();if(GUI.Button(new Rect(w*.40f,h*.55f,w*.20f,45),"RESTART RUN",card))Restart();}
         }
+        void DrawWaveCounter(float w,float h)
+        {
+            int current=Mathf.Clamp(waveIndex,1,Waves.Length);
+            GUI.Label(new Rect(w*.035f,h*.075f,120,28),current+"/"+Waves.Length,hud);
+        }
         void DrawCombo(float w,float h)
         {
-            float x=w*.035f,y=h*.077f,size=Mathf.Clamp(h*.028f,20,30);int step=player.combat.ComboStep;
-            GUI.Label(new Rect(x,y-30,170,26),"COMBO",hud);
+            float x=w*.035f,size=Mathf.Clamp(h*.028f,20,30),y=h*.94f-size-18;int step=player.combat.ComboStep;
             for(int i=0;i<3;i++)
             {
                 float px=x+i*(size+8);GUI.color=new Color(.02f,.018f,.02f,.90f);GUI.DrawTexture(new Rect(px-2,y-2,size+4,size+4),pipTexture);
                 GUI.color=i<step?(i==2?new Color(.68f,.11f,.13f):new Color(.96f,.90f,.78f)):new Color(.25f,.23f,.23f);
                 GUI.DrawTexture(new Rect(px,y,size,size),pipTexture);
             }
-            GUI.color=Color.white;GUI.Label(new Rect(x,y+size+7,200,24),player.combat.ThrowCooldownRemaining>0?"F  INK  "+player.combat.ThrowCooldownRemaining.ToString("0.0"):"F  INK",hud);
+            GUI.color=Color.white;
         }
         void DrawHealth(float w,float h)
         {
             float x=w*.035f,width=Mathf.Clamp(w*.29f,220,400),y=h*.94f;
-            GUI.Label(new Rect(x,y-32,width,28),"HEALTH",hud);
             Rect bar=new Rect(x,y,width,9);
             GUI.color=new Color(.015f,.014f,.018f,.9f);GUI.DrawTexture(new Rect(bar.x-2,bar.y-2,bar.width+4,bar.height+4),Texture2D.whiteTexture);
             GUI.color=new Color(.23f,.05f,.06f,1);GUI.DrawTexture(new Rect(bar.x,bar.y,bar.width*Mathf.Clamp01(trailHealth),bar.height),Texture2D.whiteTexture);
