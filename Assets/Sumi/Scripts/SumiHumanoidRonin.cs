@@ -52,7 +52,10 @@ namespace Sumi
         {
             if(!animator)return;
             animator.speed=1;animator.SetFloat(AttackRate,attackClipLength/Mathf.Max(.1f,move.duration));
-            animator.CrossFadeInFixedTime(move.StateHash,move.blend,0,0);
+            // Returning is the descending clip played backwards, so the hips rise with the blade
+            // instead of repeating the opening chop. Offset lands on the clip's last frame.
+            float offset=move.ReverseClip?attackClipLength*.98f:0;
+            animator.CrossFadeInFixedTime(move.StateHash,move.blend,0,offset);
         }
         void LateUpdate()
         {
@@ -86,7 +89,9 @@ namespace Sumi
         void OnDestroy(){if(strokeInk)Destroy(strokeInk);}
     }
 
-    // Keep the licensed full-body motion; blend hand targets across legal action changes.
+    // Licensed clip supplies hips and footwork. Hands follow the authored blade. Spine follows
+    // through humanoid Look At, which keeps the avatar upright; writing Transform rotations into
+    // SetBoneLocalRotation had put the hips into T-pose space and laid the body on the ground.
     public sealed class SumiGuardIK:MonoBehaviour
     {
         public SumiPlayer player;
@@ -116,6 +121,7 @@ namespace Sumi
             if(weight<=.001f||!poseReady)
             {
                 animator.SetIKPositionWeight(AvatarIKGoal.LeftHand,0);animator.SetIKRotationWeight(AvatarIKGoal.LeftHand,0);
+                animator.SetLookAtWeight(0);animator.SetIKHintPositionWeight(AvatarIKHint.RightElbow,0);animator.SetIKHintPositionWeight(AvatarIKHint.LeftElbow,0);
                 offHandRelease=0;hiltGrip=GripFar;hiltSlide=0;return;
             }
             lastGrip=Settle(lastGrip,rightShoulder,out _);
@@ -126,6 +132,15 @@ namespace Sumi
             Quaternion rotation=Quaternion.FromToRotation(Vector3.up,lastLine);
             animator.SetIKPosition(AvatarIKGoal.RightHand,lastGrip);animator.SetIKRotation(AvatarIKGoal.RightHand,rotation);
             if(offHand>.001f){animator.SetIKPosition(AvatarIKGoal.LeftHand,leftGrip);animator.SetIKRotation(AvatarIKGoal.LeftHand,rotation);}
+            var root=player.transform;
+            animator.SetIKHintPosition(AvatarIKHint.RightElbow,lastGrip-root.forward*.28f+root.right*.22f-root.up*.12f);
+            animator.SetIKHintPosition(AvatarIKHint.LeftElbow,leftGrip-root.forward*.22f-root.right*.22f-root.up*.12f);
+            animator.SetIKHintPositionWeight(AvatarIKHint.RightElbow,weight*.6f);animator.SetIKHintPositionWeight(AvatarIKHint.LeftElbow,offHand*.5f);
+            // Look At is clamped to chest height so a low finish never bows the avatar onto the ground.
+            Vector3 look=lastGrip+lastLine*.45f;
+            look.y=Mathf.Clamp(look.y,root.position.y+1.18f,root.position.y+1.82f);
+            float body=combat.CurrentAttack==null?.12f:combat.CurrentAttack.arc==SumiSwordArc.Overhead?.34f:combat.CurrentAttack.arc==SumiSwordArc.Sweep?.28f:.2f;
+            animator.SetLookAtPosition(look);animator.SetLookAtWeight(weight*.5f,body*weight,.62f,.2f,.4f);
         }
         Vector3 OffHand(Vector3 swordHand,Vector3 bladeLine,out float strain)
         {
