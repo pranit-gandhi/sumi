@@ -1,5 +1,12 @@
 ﻿# Sumi asset attributions
 
+## 2026-09-20 music and sword audio
+
+- The user supplied `Samurai.mp3` for the looping background track.
+- The user supplied five sword recordings: `59992__qubodup__swosh-sword-swing.flac` and `160756__cosmicembers__fast-swing-air-woosh.wav` for swings; `109432__black-snow__sword-slice-23.wav` and `27858__erdie__sword04.wav` for hits; and `22428__kibibu__sword_4.wav` for blocks and parries.
+- Imported audio is under `Assets/Sumi/Resources/Sumi/Audio`. The FLAC was converted to WAV, two 96 kHz recordings were resampled to 44.1 kHz, and trailing silence was trimmed from the hit/parry recordings. The supplied music file is unchanged.
+- The source files did not include license documents. Confirm redistribution rights before publishing a build with these recordings.
+
 ## Jiayou Akira font
 - Source: https://www.fontspace.com/j-jiayou-akira-font-f112283
 - Supplied in `j-jiayou-akira-font.zip` by the user. Its included `info.txt` says "Freeware, Non-Commercial". The in-game interface uses this font; a commercial release needs a different font or a commercial license.

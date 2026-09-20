@@ -15,7 +15,7 @@ public static class SumiCombatAuthoring
         var attack=Copy("Sword_Attack","Sword_Attack");var guard=Copy("Sword_Idle","Sword_Guard");var hit=Copy("Hit_Chest","Sword_Hit");var death=Copy("Death01","Sword_Death");
         var controller=AssetDatabase.LoadAssetAtPath<AnimatorController>(root+"Locomotion.controller");var layers=controller.layers;layers[0].iKPass=true;controller.layers=layers;var sm=controller.layers[0].stateMachine;
         if(!controller.parameters.Any(p=>p.name=="AttackRate")){controller.AddParameter("AttackRate",AnimatorControllerParameterType.Float);var ps=controller.parameters;foreach(var p in ps)if(p.name=="AttackRate")p.defaultFloat=2.2f;controller.parameters=ps;}
-        Add(sm,"Attack1",attack,1,false);Add(sm,"Attack2",attack,1,false);Add(sm,"Attack3",attack,1,false);Add(sm,"HeavyAttack",attack,1,false);Add(sm,"Guard",guard,1,false);Add(sm,"Hit",hit,1,false);Add(sm,"Death",death,1,false);
+        Add(sm,"Attack1",attack,1,false);Add(sm,"Attack2",attack,-1,false);Add(sm,"Attack3",attack,1,false);Add(sm,"HeavyAttack",attack,1,false);Add(sm,"Guard",guard,1,false);Add(sm,"Hit",hit,1,false);Add(sm,"Death",death,1,false);
         foreach(var entry in sm.states)if(entry.state.name.StartsWith("Attack")||entry.state.name=="HeavyAttack"){entry.state.speedParameter="AttackRate";entry.state.speedParameterActive=true;}
         AuthorMoves();
         AssetDatabase.SaveAssets();Debug.Log("SUMI_COMBAT_AUTHORING copied CC0 clips and added combat states");

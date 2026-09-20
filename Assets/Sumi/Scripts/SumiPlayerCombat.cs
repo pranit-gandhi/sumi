@@ -23,7 +23,7 @@ namespace Sumi
         public bool BladeActive=>CurrentAttack&&elapsed>=CurrentAttack.activeWindow.x&&elapsed<=CurrentAttack.activeWindow.y;
         public float ThrowCooldownRemaining=>Mathf.Max(0,nextThrowAt-Time.time);
         public bool Invulnerable=>state==SumiCombatState.DashStrike&&elapsed>=.055f&&elapsed<=.29f;
-        public SumiEnemy ExecutionTarget=>executionTarget&&!executionTarget.dead&&executionTarget.health<=executionTarget.maxHealth*.35f?executionTarget:null;
+        public SumiEnemy ExecutionTarget=>executionTarget&&executionTarget.CanExecute?executionTarget:null;
 
         const float InputLifetime=.20f,DashLifetime=.18f,FlashDistance=3.95f;
         SumiPlayer player;SumiHumanoidRonin human;
@@ -67,7 +67,7 @@ namespace Sumi
             }
             input.Peek(now);
             // Sample inputs during hit stop, but never advance states or change the frozen pose.
-            if(dt<=0)return;
+            if(dt<=0||Time.timeScale<=0)return;
             float before=elapsed;elapsed+=dt;
             FindExecutionTarget();
             if(execute&&ExecutionTarget&&(state==SumiCombatState.Free||IsGuarding)){Execute(ExecutionTarget);return;}
@@ -173,7 +173,7 @@ namespace Sumi
             travelDistance=move.lunge;
             if(assistedTarget)travelDistance=Mathf.Min(travelDistance,Mathf.Max(0,Vector3.Distance(transform.position,assistedTarget.transform.position)-1.1f));
             human.PlayCombat(move);
-            SumiCombatFeedback.Swing(move.finisher);
+            SumiCombatFeedback.Swing(move.finisher||move==flash);
         }
         void StartFlash(Vector2 axis)
         {
@@ -265,22 +265,23 @@ namespace Sumi
                 Vector3 contact=hits[i].ClosestPoint((from+to)*.5f);
                 if(Physics.Linecast(transform.position+Vector3.up*1.2f,contact,1<<8,QueryTriggerInteraction.Ignore))continue;
                 hitIds.Add(enemy.GetInstanceID());HitConfirmed=true;
-                var kind=state==SumiCombatState.DashStrike?SumiHitKind.DashCut:SumiHitKind.ShoulderCut;
+                var kind=state==SumiCombatState.DashStrike?SumiHitKind.DashCut:CurrentAttack==heavy?SumiHitKind.HeavyCut:CurrentAttack.finisher?SumiHitKind.Finisher:SumiHitKind.ShoulderCut;
                 enemy.TakeHit(CurrentAttack.damage,(enemy.transform.position-transform.position).normalized,kind);
                 if(!impactPlayed){SumiCombatFeedback.Hit(CurrentAttack.hitStop,CurrentAttack.cameraKick,contact);impactPlayed=true;}
                 if(kind==SumiHitKind.DashCut)SumiCombatFeedback.WaistCut(enemy,contact);
             }
         }
 
-        public void ReceiveEnemyHit(float damage,float blockCost,SumiEnemy enemy,Vector3 contact)
+        public void ReceiveEnemyHit(float damage,float blockCost,SumiEnemy enemy,Vector3 contact,bool unblockable=false)
         {
             if(state==SumiCombatState.Dead||Time.time<damageGraceUntil||Invulnerable)return;
             Vector3 to=enemy.transform.position-transform.position;to.y=0;
             bool facing=Vector3.Dot(transform.forward,to.normalized)>.05f;
-            if(Perfect&&facing){enemy.Parried(true);SumiCombatFeedback.Parry(contact,to);return;}
-            if(IsGuarding&&facing)
+            if(Perfect&&facing&&!unblockable){enemy.Parried(true);SumiCombatFeedback.Parry(contact,to);return;}
+            if(IsGuarding&&facing&&!unblockable)
             {
-                enemy.Parried(false);health=Mathf.Max(0,health-damage*.15f);damageGraceUntil=Time.time+.3f;
+                // A held block mitigates damage; only a timed deflection stops the attacker.
+                health=Mathf.Max(0,health-damage*.18f*(steadyHeart?.8f:1));damageGraceUntil=Time.time+.18f;
                 SumiCombatFeedback.Block(contact);NotifyDamage();return;
             }
             Damage(damage,.26f,contact);
@@ -303,7 +304,7 @@ namespace Sumi
             executionTarget=null;float best=2.1f;
             foreach(var e in SumiEnemy.Active)
             {
-                if(e.dead||e.health>e.maxHealth*.35f)continue;float distance=Vector3.Distance(transform.position,e.transform.position);
+                if(!e.CanExecute)continue;float distance=Vector3.Distance(transform.position,e.transform.position);
                 if(distance<best&&!Physics.Linecast(transform.position+Vector3.up,e.transform.position+Vector3.up,1<<8)){best=distance;executionTarget=e;}
             }
         }
