@@ -5,7 +5,7 @@ using UnityEngine.SceneManagement;
 
 namespace Sumi
 {
-    public enum SumiRunState { Intro,WaveOne,UpgradeOne,WaveTwo,UpgradeTwo,BossIntro,Boss,Victory,Death,Paused }
+    public enum SumiRunState { Intro,Wave,Upgrade,BossIntro,Boss,Victory,Death,Paused }
     public enum SumiEnemyKind { Retainer,Shade,Oni }
 
     // One owner for hit stop and menus prevents a late effect from unpausing the game.
@@ -22,12 +22,30 @@ namespace Sumi
     public sealed class SumiRunDirector:MonoBehaviour
     {
         public SumiRunState state=SumiRunState.Intro;public SumiPlayer player;
-        public bool CombatActive=>state==SumiRunState.WaveOne||state==SumiRunState.WaveTwo||state==SumiRunState.Boss;
+        public bool CombatActive=>state==SumiRunState.Wave||state==SumiRunState.Boss;
         public bool Paused=>state==SumiRunState.Paused;
         public float redPulse;public string banner="THE PAINTED COURT";
         readonly List<SumiEnemy> enemies=new List<SumiEnemy>();readonly List<int> offered=new List<int>();readonly HashSet<int> chosen=new HashSet<int>();
-        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned;GUIStyle title,small,hud,card,center,wheelName,wheelNote;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture;Texture2D[] wheelSegments;
+        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNote;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture;Texture2D[] wheelSegments;
         static readonly Vector3[] Gates={new Vector3(0,0,17.5f),new Vector3(17.5f,0,0),new Vector3(0,0,-17.5f),new Vector3(-17.5f,0,0)};
+
+        // The approach to the Oni is a ladder: each wave puts one more body on the court than the
+        // last, drawn from the same two kinds the run already uses, so the pressure grows without
+        // asking the player to read anything new. The Oni stays the only thing the boss introduces.
+        // upgrade marks the waves answered with a spell; the pool holds six, and FillOffers needs
+        // three unchosen to fill a wheel, so at most four of these may be true.
+        struct Wave { public int retainers,shades;public bool arrows,upgrade;public string banner; }
+        static readonly Wave[] Waves=
+        {
+            new Wave{retainers=2,shades=0,arrows=false,upgrade=false,banner="FIRST INK — THE RETAINERS"},
+            new Wave{retainers=3,shades=0,arrows=false,upgrade=true, banner="SECOND INK — THE GATHERING"},
+            new Wave{retainers=3,shades=1,arrows=true, upgrade=false,banner="THIRD INK — FOUR DIRECTIONS"},
+            new Wave{retainers=4,shades=1,arrows=true, upgrade=true, banner="FOURTH INK — THE CLOSING FAN"},
+            new Wave{retainers=4,shades=2,arrows=true, upgrade=false,banner="FIFTH INK — THE DEEP COURT"},
+            new Wave{retainers=5,shades=2,arrows=true, upgrade=true, banner="SIXTH INK — THE BLACK RING"},
+            new Wave{retainers=5,shades=3,arrows=true, upgrade=false,banner="SEVENTH INK — THE CROWDED GATE"},
+            new Wave{retainers=6,shades=3,arrows=true, upgrade=true, banner="EIGHTH INK — BEFORE THE BELL"},
+        };
         static readonly string[] UpgradeNames={"RED THREAD","SECOND BREATH","STEADY HEART","SPLIT INK","DEEP INK","QUICK INK"};
         static readonly string[] UpgradeText={"+25 max health","Executions heal 10","Take 20% less damage","Throw two darts","Darts hit harder","Throw more often"};
 
@@ -40,15 +58,15 @@ namespace Sumi
             var k=Keyboard.current;
             if((state==SumiRunState.Death||state==SumiRunState.Victory)&&k!=null&&k.rKey.wasPressedThisFrame){Restart();return;}
             if(state==SumiRunState.Intro&&Time.unscaledTime-stateAt>2.2f)BeginWave(1);
-            if(state==SumiRunState.WaveOne||state==SumiRunState.WaveTwo||state==SumiRunState.Boss)
+            if(state==SumiRunState.Wave||state==SumiRunState.Boss)
             {
                 enemies.RemoveAll(e=>!e);
                 if(player.combat.health<=0){EnterEnd(false);return;}
-                if((state==SumiRunState.WaveTwo||state==SumiRunState.Boss)&&Time.time>=nextArrowAt){SpawnArrow();nextArrowAt=Time.time+Random.Range(7.5f,10.5f);}
+                // Waves that hold no arrows park nextArrowAt out of reach rather than test the state.
+                if(Time.time>=nextArrowAt){SpawnArrow();nextArrowAt=Time.time+Random.Range(7.5f,10.5f);}
                 if(spawned>0&&AliveCount()==0)
                 {
-                    if(state==SumiRunState.WaveOne)OpenUpgrade(false);
-                    else if(state==SumiRunState.WaveTwo)OpenUpgrade(true);
+                    if(state==SumiRunState.Wave)ClearWave();
                     else EnterEnd(true);
                 }
             }
@@ -57,16 +75,36 @@ namespace Sumi
 
         void BeginWave(int wave)
         {
-            state=wave==1?SumiRunState.WaveOne:SumiRunState.WaveTwo;spawned=0;attacker=null;player.controllable=true;
-            Banner(wave==1?"FIRST INK — THE RETAINERS":"SECOND INK — FOUR DIRECTIONS",2.1f);
-            if(wave==1){Spawn(SumiEnemyKind.Retainer,0);Spawn(SumiEnemyKind.Retainer,2);}
-            else {Spawn(SumiEnemyKind.Shade,1);Spawn(SumiEnemyKind.Retainer,2);Spawn(SumiEnemyKind.Retainer,3);nextArrowAt=Time.time+5.2f;}
+            waveIndex=Mathf.Clamp(wave,1,Waves.Length);var plan=Waves[waveIndex-1];
+            state=SumiRunState.Wave;spawned=0;attacker=null;player.controllable=true;
+            Banner(plan.banner,2.1f);
+            // Shades lead so they take the spread-out gates; the retainers fill in behind them.
+            int total=plan.shades+plan.retainers,slot=0;
+            for(int i=0;i<plan.shades;i++)Spawn(SumiEnemyKind.Shade,slot++,total);
+            for(int i=0;i<plan.retainers;i++)Spawn(SumiEnemyKind.Retainer,slot++,total);
+            nextArrowAt=plan.arrows?Time.time+5.2f:float.MaxValue;
         }
-        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;player.controllable=true;Spawn(SumiEnemyKind.Oni,0);nextArrowAt=Time.time+8;Banner("THE PAINTED ONI",2.3f);}
-        void Spawn(SumiEnemyKind kind,int gate)
+        // Clearing a wave either pays out a spell or rolls straight into the next one.
+        void ClearWave(){if(Waves[waveIndex-1].upgrade)OpenUpgrade();else Advance();}
+        void Advance()
         {
-            var go=new GameObject(kind==SumiEnemyKind.Oni?"Painted Oni":kind==SumiEnemyKind.Shade?"Ink Shade":"Ashen Retainer");go.transform.position=Gates[gate%4]+Vector3.up*.02f;
+            if(waveIndex<Waves.Length){BeginWave(waveIndex+1);return;}
+            state=SumiRunState.BossIntro;stateAt=Time.unscaledTime;player.controllable=false;Banner("A BELL BENEATH THE PAPER",1.8f);
+        }
+        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;player.controllable=true;Spawn(SumiEnemyKind.Oni,0,1);nextArrowAt=Time.time+8;Banner("THE PAINTED ONI",2.3f);}
+        void Spawn(SumiEnemyKind kind,int slot,int total)
+        {
+            var go=new GameObject(kind==SumiEnemyKind.Oni?"Painted Oni":kind==SumiEnemyKind.Shade?"Ink Shade":"Ashen Retainer");go.transform.position=SpawnPoint(slot,total);
             var e=go.AddComponent<SumiEnemy>();e.Init(player,kind,this);enemies.Add(e);spawned++;
+        }
+        // Up to four arrivals spread evenly over the gates; past that a second rank forms beside and
+        // just inside the first, so two bodies can never materialise inside one another.
+        Vector3 SpawnPoint(int slot,int total)
+        {
+            int rank=slot/Gates.Length;
+            Vector3 anchor=Gates[(total<=Gates.Length?Mathf.RoundToInt(slot*(float)Gates.Length/total):slot)%Gates.Length];
+            Vector3 outward=anchor.normalized,tangent=Vector3.Cross(Vector3.up,outward);
+            return anchor+tangent*(rank*1.7f)-outward*(rank*.9f)+Vector3.up*.02f;
         }
         int AliveCount(){int n=0;foreach(var e in enemies)if(e&&!e.dead)n++;return n;}
         public bool RequestAttack(SumiEnemy enemy){if(!CombatActive)return false;if(attacker&&attacker!=enemy&&!attacker.dead)return false;attacker=enemy;return true;}
@@ -75,16 +113,19 @@ namespace Sumi
         public void EnemyDied(SumiEnemy enemy){ReleaseAttack(enemy);}
         void SpawnArrow(){if(!CombatActive||!player.controllable)return;new GameObject("Announced ink arrow").AddComponent<SumiArrowStrike>().Init(player,this);}
 
-        void OpenUpgrade(bool second)
+        void OpenUpgrade()
         {
-            state=second?SumiRunState.UpgradeTwo:SumiRunState.UpgradeOne;player.controllable=false;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
-            offered.Clear();FillOffers();Banner("CHOOSE A SPELL",99);
+            offered.Clear();FillOffers();
+            // Nothing left to offer is not a menu; roll on rather than show an empty wheel.
+            if(offered.Count==0){Advance();return;}
+            state=SumiRunState.Upgrade;player.controllable=false;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
+            Banner("CHOOSE A SPELL",99);
             player.combat.health=Mathf.Min(player.combat.maxHealth,player.combat.health+12);
         }
         void Choose(int slot)
         {
             FillOffers();if(slot<0||slot>=offered.Count)return;int id=offered[slot];chosen.Add(id);player.combat.ApplyUpgrade(id);SumiTime.Menu(false);Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
-            if(state==SumiRunState.UpgradeOne)BeginWave(2);else {state=SumiRunState.BossIntro;stateAt=Time.unscaledTime;player.controllable=false;Banner("A BELL BENEATH THE PAPER",1.8f);}
+            Advance();
         }
         void EnterEnd(bool victory)
         {
@@ -100,14 +141,23 @@ namespace Sumi
             if(colorBlock==null)colorBlock=new MaterialPropertyBlock();
             foreach(var r in playerRenderers){if(!r)continue;r.GetPropertyBlock(colorBlock);colorBlock.SetFloat("_Gold",0);colorBlock.SetFloat("_Red",red);r.SetPropertyBlock(colorBlock);}
         }
+        // Walks the pool once from a random start instead of drawing until a miss. The old loop
+        // spun forever the moment fewer than three upgrades were left unchosen, which more waves
+        // now make reachable.
         void FillOffers()
         {
-            while(offered.Count<3){int n=Random.Range(0,UpgradeNames.Length);if(!chosen.Contains(n)&&!offered.Contains(n))offered.Add(n);}
+            if(offered.Count>=3)return;
+            int start=Random.Range(0,UpgradeNames.Length);
+            for(int i=0;i<UpgradeNames.Length&&offered.Count<3;i++)
+            {
+                int id=(start+i)%UpgradeNames.Length;
+                if(!chosen.Contains(id)&&!offered.Contains(id))offered.Add(id);
+            }
         }
         public void TogglePause()
         {
             if(state==SumiRunState.Death||state==SumiRunState.Victory)return;
-            if(state==SumiRunState.Paused){state=beforePause;bool choosing=state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo;SumiTime.Menu(choosing);Cursor.lockState=choosing?CursorLockMode.None:CursorLockMode.Locked;Cursor.visible=choosing;}
+            if(state==SumiRunState.Paused){state=beforePause;bool choosing=state==SumiRunState.Upgrade;SumiTime.Menu(choosing);Cursor.lockState=choosing?CursorLockMode.None:CursorLockMode.Locked;Cursor.visible=choosing;}
             else {beforePause=state;state=SumiRunState.Paused;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
         }
         void Restart(){SumiTime.Reset();SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);}
@@ -136,14 +186,14 @@ namespace Sumi
             GUI.color=old;
             if(player&&player.combat!=null)
             {
-                if(state!=SumiRunState.UpgradeOne&&state!=SumiRunState.UpgradeTwo){DrawCombo(w,h);DrawHealth(w,h);}
+                if(state!=SumiRunState.Upgrade){DrawCombo(w,h);DrawHealth(w,h);}
                 if(player.combat.ExecutionTarget)GUI.Label(new Rect(w*.37f,h*.69f,w*.26f,42),"E  —  DECISIVE CUT",center);
             }
-            if(state!=SumiRunState.UpgradeOne&&state!=SumiRunState.UpgradeTwo&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
-            if(Time.unscaledTime<bannerUntil&&state!=SumiRunState.UpgradeOne&&state!=SumiRunState.UpgradeTwo)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
+            if(state!=SumiRunState.Upgrade&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
+            if(Time.unscaledTime<bannerUntil&&state!=SumiRunState.Upgrade)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
             if(state==SumiRunState.Intro)GUI.Label(new Rect(w*.2f,h*.89f,w*.6f,25),"F  THROW INK",small);
             if(state==SumiRunState.Intro){GUI.Label(new Rect(w*.2f,h*.73f,w*.6f,h*.16f),"WASD move   •   LMB shoulder cut   •   RMB hold / perfect deflect\nSPACE Brush Flash   •   Q lock   •   E execute",small);}
-            if(state==SumiRunState.UpgradeOne||state==SumiRunState.UpgradeTwo)
+            if(state==SumiRunState.Upgrade)
             {
                 DrawSpellWheel(w,h);
             }
@@ -186,10 +236,12 @@ namespace Sumi
             Color old=GUI.color;GUI.color=new Color(.015f,.013f,.014f,.52f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);GUI.color=old;
             float size=Mathf.Min(w*.44f,h*.68f),cx=w*.5f,cy=h*.52f;Rect wheel=new Rect(cx-size*.5f,cy-size*.5f,size,size);
             Vector2 pointer=Event.current.mousePosition-new Vector2(cx,cy);float radius=pointer.magnitude;
-            int hover=-1;if(radius>size*.10f&&radius<size*.48f){float a=(Mathf.Atan2(pointer.y,pointer.x)*Mathf.Rad2Deg+150+360)%360;hover=Mathf.FloorToInt(a/120);}
+            // A late wheel can run short of unchosen spells, so every sector is gated on an offer.
+            int filled=Mathf.Min(3,offered.Count);
+            int hover=-1;if(radius>size*.10f&&radius<size*.48f){float a=(Mathf.Atan2(pointer.y,pointer.x)*Mathf.Rad2Deg+150+360)%360;hover=Mathf.FloorToInt(a/120);if(hover>=filled)hover=-1;}
             for(int i=0;i<3;i++){GUI.color=i==hover?new Color(.68f,.07f,.10f):new Color(.045f,.040f,.044f);GUI.DrawTexture(wheel,wheelSegments[i]);}
             GUI.color=new Color(.025f,.023f,.026f,.98f);GUI.DrawTexture(new Rect(cx-size*.11f,cy-size*.11f,size*.22f,size*.22f),pipTexture);GUI.color=old;
-            for(int i=0;i<3;i++)
+            for(int i=0;i<filled;i++)
             {
                 float angle=(-90+i*120)*Mathf.Deg2Rad;Vector2 point=new Vector2(cx+Mathf.Cos(angle)*size*.31f,cy+Mathf.Sin(angle)*size*.31f);
                 GUI.Label(new Rect(point.x-size*.23f,point.y-36,size*.46f,48),UpgradeNames[offered[i]],wheelName);

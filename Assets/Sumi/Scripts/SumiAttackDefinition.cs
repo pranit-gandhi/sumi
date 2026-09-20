@@ -65,6 +65,7 @@ namespace Sumi
                 direction=new Vector3(Mathf.Sin(angle)*.78f,Mathf.Sin(angle)*.62f,Mathf.Cos(angle)).normalized;
             }
         }
+        public bool ReverseClip=>arc==SumiSwordArc.Returning;
     }
 
     // One expiring action, never a growing queue of old button presses.
