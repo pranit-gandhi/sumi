@@ -12,7 +12,7 @@ Sumi is a Unity 6 third-person katana roguelite slice presented as a living mono
 - Right Mouse: hold guard; press just before contact for a perfect deflection
 - `Space`: buffered Brush Flash; cancel earlier after a confirmed hit
 - `Q`: toggle target lock
-- `E`: finish a nearby enemy below 35% health
+- `E`: finish a nearby enemy at 35% health or less (12% for the Oni)
 - `F`: throw an ink dart (3.5-second cooldown)
 - `F3`: toggle combat timing debug overlay
 - `Esc`: pause
@@ -25,6 +25,8 @@ Sumi is a Unity 6 third-person katana roguelite slice presented as a living mono
 3. Enter Play Mode.
 
 The project uses URP 17.2.0. The run includes two randomized three-choice spell wheels, telegraphed arrow hazards, health and ink-dart upgrades, a three-hit sword combo, low-health executions, an Oni boss, pause, death, victory and restart.
+
+The run plays the supplied `Samurai.mp3` as looping background music and uses recorded sword swings, impacts, and parries. Music pauses with the pause screen.
 
 ## Collaborating
 
@@ -54,3 +56,5 @@ Do not run `SumiHumanoidBuild.Build`; it recreates an older outfit. Use `SumiCha
 ## Sword combat tuning
 
 Moves live in `Assets/Sumi/Resources/Sumi/Attacks/`. Each asset controls timing in seconds, damage, footwork, legal follow-ups and impact feedback. See [COMBAT.md](COMBAT.md) for the design, controls and repeatable Play Mode checks. Existing WebGL packages predate this combat update; build again to distribute it.
+
+Enemies now use distinct patterns: Retainers chain cuts, Shades lunge and retreat, and the Oni alternates cuts, delayed slams and crimson sweeps before awakening into a second phase. Gold warnings indicate braced attacks: use a heavy cut during their windup or perfectly deflect their strike. Crimson sweeps require Brush Flash or moving out of reach. Held guard mitigates damage without staggering enemies. The next opponent can prepare during another's recovery, while arrow hazards take a separate turn in the group attack budget.

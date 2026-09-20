@@ -8,7 +8,7 @@ namespace Sumi
         public SumiPlayer player;public Transform cinematicTarget;public float yaw,pitch=11,distance=5.65f;public bool reducedMotion;
         public CinemachineCamera virtualCamera;
         public float lookSensitivity=.115f,guardLookSensitivity=.15f;
-        public float impulse;float cinematicUntil,cinematicWeight,walkPhase,walkWeight,strikeOffset;Vector3 smoothPosition;bool poseReady;
+        public float impulse;float cinematicUntil,cinematicWeight,cinematicInfluence=1,cinematicZoom,walkPhase,walkWeight,strikeOffset;Vector3 smoothPosition;bool poseReady;
         // Lock-on steering. The mouse always outranks it; the automatic bearing only fills the gap
         // the player leaves, and it moves under a rate limit so acquiring never snaps the view.
         float lockWeight,manualUntil,manualAuthority=1,lockBearing,yawVelocity,pitchVelocity,followRate=16f;
@@ -16,7 +16,10 @@ namespace Sumi
         const float LockEngage=.40f,LockRelease=.22f,ManualHold=.16f,LockRange=18f,MinLockSpan=1.15f;
         const float YawSmooth=.20f,MaxYawRate=420f,YawDeadzone=1.1f,PitchSmooth=.34f,MaxPitchRate=75f;
         public void Kick(float strength){impulse=Mathf.Max(impulse,reducedMotion?strength*.15f:strength);}
-        public void Frame(Transform target,float duration){cinematicTarget=target;cinematicUntil=Time.unscaledTime+duration;}
+        public void Frame(Transform target,float duration){cinematicTarget=target;cinematicUntil=Time.unscaledTime+duration;cinematicInfluence=1;cinematicZoom=-1.45f;}
+        // Volley framing only biases composition. Mouse orbit remains live and the bias eases out
+        // before precise dodging matters.
+        public void FrameVolley(Transform target,float duration,float strength){cinematicTarget=target;cinematicUntil=Time.unscaledTime+duration;cinematicInfluence=Mathf.Clamp01(strength);cinematicZoom=.35f;}
         // Pressing lock is an explicit request for the camera to take the bearing, so the hold that
         // normally protects mouse aiming is dropped; the rate limit still keeps the swing smooth.
         public void EngageLock(){manualUntil=0;}
@@ -88,8 +91,9 @@ namespace Sumi
             cinematicWeight=Mathf.MoveTowards(cinematicWeight,cinematic,dt/(cinematic>0?.16f:.26f));
             if(cinematicWeight>.002f&&cinematicTarget)
             {
-                focus=Vector3.Lerp(focus,cinematicTarget.position+Vector3.up*1.2f,.45f*cinematicWeight);
-                zoom=Mathf.Lerp(zoom,4.2f,cinematicWeight);
+                float influence=cinematicWeight*cinematicInfluence;
+                focus=Vector3.Lerp(focus,cinematicTarget.position,.45f*influence);
+                zoom=Mathf.Lerp(zoom,distance+cinematicZoom,influence);
             }
             Quaternion angle=Quaternion.Euler(pitch,yaw,0);Vector3 desired=focus-angle*Vector3.forward*zoom+angle*Vector3.right*.5f;
             var ray=desired-focus; if(Physics.SphereCast(focus,.24f,ray.normalized,out var hit,ray.magnitude,1<<8,QueryTriggerInteraction.Ignore))desired=focus+ray.normalized*Mathf.Max(.65f,hit.distance-.12f);

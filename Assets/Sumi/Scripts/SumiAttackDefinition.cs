@@ -21,6 +21,7 @@ namespace Sumi
         public bool finisher;
         public SumiAttackDefinition lightFollowUp,heavyFollowUp;
         public int StateHash=>Animator.StringToHash("Base Layer."+animationState);
+        public bool ReverseClip=>arc==SumiSwordArc.Returning;
         public bool CanLink(float time)=>time>=linkWindow.x&&time<=linkWindow.y;
         public bool CrossesActive(float before,float after)=>after>=activeWindow.x&&before<activeWindow.y;
         public float Movement(float time)=>time<activeWindow.x?startupMovement:time<=activeWindow.y?activeMovement:

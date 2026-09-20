@@ -1,6 +1,17 @@
 # Sumi progress
 
-Updated 2026-09-19. Current milestone: PR #2 combat/interface refinement.
+Updated 2026-09-20. Current milestone: enemy combat challenge iteration.
+
+## 2026-09-20 enemy combat challenge
+
+- Retainers now have 90 health, a two-cut sequence and a braced overhead. Shades have 64 health, faster approach/orbit movement, a narrow lunge and a diagonal retreat. The Oni retains 340 health and gains cut/sweep/overhead patterns, an awakening at 55%, a second-phase return cut, and a 12% execution threshold.
+- Held guard now takes 18% chip damage without harming or staggering enemies. Perfect deflection deals 12 damage and grants a 0.95-second punish window. Heavy cuts interrupt braced windups; light hits still deal full damage. Existing recoil and recovery cannot be restarted by repeated hits.
+- Ground fans, attack labels and first-use hints communicate threats. Gold indicates bracing; the crimson sweep requires evasion. Enemy timing drives blade posing, two-hand IK, contact and trails. Scarves have bounded segment lengths during lunges.
+- The attack token passes at the beginning of recovery, prioritizes another ready enemy, and checks visibility/line of sight. Wave-two arrows reserve a separate attack turn and freeze during pause/hit stop. The Oni encounter uses its own moves instead of independent arrows.
+- Verification: Unity 6000.2.14f1 compiled; **34 Play Mode checks passed**, including an actual player heavy blade hit, timed Retainer/Shade/Oni attacks, group handoffs, guard/deflection/interrupt rules, pause/hit-stop hazards, both waves and spell selections, Oni phase/finisher rules, victory, death and restart. No runtime exceptions or compiler errors appeared during the successful run. `git diff --check` passed. The enemy sweep warning and pose were visually reviewed in a local capture.
+- `Assets/Editor/SumiCombatVerification.cs` keeps the checks reproducible. Results/captures are local under `Logs/`. Full run flow checks accelerate enemy deaths; they are not a human balance playthrough. Subjective feel still needs human playtesting. WebGL/itch packages have not been rebuilt for this iteration.
+
+See `COMBAT.md` for combat rules, tuning locations and the verification command. Earlier milestones below describe their historical state.
 
 ## 2026-09-19 focused PR #1 highlights
 
