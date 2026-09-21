@@ -11,15 +11,28 @@ namespace Sumi
         public float impulse;float cinematicUntil,cinematicWeight,cinematicInfluence=1,cinematicZoom,walkPhase,walkWeight,strikeOffset;Vector3 smoothPosition;bool poseReady;
         // Lock-on steering. The mouse always outranks it; the automatic bearing only fills the gap
         // the player leaves, and it moves under a rate limit so acquiring never snaps the view.
-        float lockWeight,manualUntil,manualAuthority=1,lockBearing,yawVelocity,pitchVelocity,followRate=16f;
-        Vector3 focusLead,focusLeadVelocity;
+        float lockWeight,manualUntil,manualAuthority=1,lockBearing,yawVelocity,pitchVelocity,followRate=16f,volleyLift,volleyLiftTarget,volleyLiftVelocity;
+        Vector3 focusLead,focusLeadVelocity,shakeDir=Vector3.up,swayOffset,swayVelocity;
         const float LockEngage=.40f,LockRelease=.22f,ManualHold=.16f,LockRange=18f,MinLockSpan=1.15f;
         const float YawSmooth=.20f,MaxYawRate=420f,YawDeadzone=1.1f,PitchSmooth=.34f,MaxPitchRate=75f;
-        public void Kick(float strength){impulse=Mathf.Max(impulse,reducedMotion?strength*.15f:strength);}
+        public void Kick(float strength)
+        {
+            float amp=reducedMotion?strength*.15f:strength;if(amp<.001f)return;
+            impulse=Mathf.Max(impulse,amp);
+            shakeDir=new Vector3(Random.Range(-.6f,.6f),Random.Range(.25f,1f),0).normalized;
+        }
+        // A dash lags the orbit opposite the lunge, then eases back; it is not an impact punch.
+        public void Sway(float strength,Vector3 worldDir)
+        {
+            float amp=reducedMotion?strength*.15f:strength;if(amp<.001f)return;
+            impulse=Mathf.Max(impulse,amp*.45f);
+            shakeDir=new Vector3(Random.Range(-.6f,.6f),Random.Range(.25f,1f),0).normalized;
+            Vector3 lateral=worldDir;lateral.y=0;if(lateral.sqrMagnitude<.01f)lateral=transform.forward;
+            swayOffset+=Vector3.ClampMagnitude(-lateral.normalized*amp*.7f+Vector3.up*amp*.16f,.5f);
+        }
         public void Frame(Transform target,float duration){cinematicTarget=target;cinematicUntil=Time.unscaledTime+duration;cinematicInfluence=1;cinematicZoom=-1.45f;}
-        // Volley framing only biases composition. Mouse orbit remains live and the bias eases out
-        // before precise dodging matters.
-        public void FrameVolley(Transform target,float duration,float strength){cinematicTarget=target;cinematicUntil=Time.unscaledTime+duration;cinematicInfluence=Mathf.Clamp01(strength);cinematicZoom=.35f;}
+        // A warned circle needs a higher eyeline so the player can read its radius; orbit otherwise stays untouched.
+        public void LiftForVolley(bool raised){volleyLiftTarget=raised?(player&&player.config&&player.config.arrowVolley!=null?player.config.arrowVolley.cameraLift:2.6f):0;}
         // Pressing lock is an explicit request for the camera to take the bearing, so the hold that
         // normally protects mouse aiming is dropped; the rate limit still keeps the swing smooth.
         public void EngageLock(){manualUntil=0;}
@@ -96,14 +109,20 @@ namespace Sumi
                 zoom=Mathf.Lerp(zoom,distance+cinematicZoom,influence);
             }
             Quaternion angle=Quaternion.Euler(pitch,yaw,0);Vector3 desired=focus-angle*Vector3.forward*zoom+angle*Vector3.right*.5f;
+            volleyLift=Mathf.SmoothDamp(volleyLift,volleyLiftTarget,ref volleyLiftVelocity,.45f,12f,dt);
+            desired+=Vector3.up*volleyLift;
             var ray=desired-focus; if(Physics.SphereCast(focus,.24f,ray.normalized,out var hit,ray.magnitude,1<<8,QueryTriggerInteraction.Ignore))desired=focus+ray.normalized*Mathf.Max(.65f,hit.distance-.12f);
-            impulse=Mathf.MoveTowards(impulse,0,dt*1.6f);var noise=new Vector3(Mathf.Sin(Time.unscaledTime*23),Mathf.Cos(Time.unscaledTime*19),0)*impulse*.18f;
+            impulse*=Mathf.Exp(-dt*6.4f);if(impulse<.002f)impulse=0;
+            Vector3 rumble=new Vector3(Mathf.Sin(Time.unscaledTime*48f),Mathf.Cos(Time.unscaledTime*41f),0)*impulse*.16f;
+            Vector3 shake=shakeDir*impulse*.48f+rumble;
+            swayOffset=Vector3.SmoothDamp(swayOffset,Vector3.zero,ref swayVelocity,.16f,14f,dt);
             strikeOffset=Mathf.MoveTowards(strikeOffset,striking?.22f:0,dt*(striking?2.7f:1.8f));
             desired+=angle*Vector3.right*(step*.012f*walkWeight+strikeOffset);
             // Easing the follow constant keeps the dash entry and exit from stepping the smoothing.
             followRate=Mathf.MoveTowards(followRate,dashing?11f:16f,dt*26f);
-            if(!poseReady){smoothPosition=desired;poseReady=true;}smoothPosition=Vector3.Lerp(smoothPosition,desired,1-Mathf.Exp(-followRate*dt));transform.position=smoothPosition+noise;
-            transform.rotation=Quaternion.LookRotation(focus-smoothPosition)*Quaternion.Euler(0,0,Mathf.Sin(Time.unscaledTime*21)*impulse*1.5f);
+            if(!poseReady){smoothPosition=desired;poseReady=true;}smoothPosition=Vector3.Lerp(smoothPosition,desired,1-Mathf.Exp(-followRate*dt));
+            transform.position=smoothPosition+shake+swayOffset;
+            transform.rotation=Quaternion.LookRotation(focus-smoothPosition)*Quaternion.Euler(-impulse*8.2f+Mathf.Sin(Time.unscaledTime*29f)*impulse*3.2f,Mathf.Sin(Time.unscaledTime*17f)*impulse*2.4f,shakeDir.x*impulse*9.5f);
             if(virtualCamera){virtualCamera.transform.SetPositionAndRotation(transform.position,transform.rotation);}
         }
     }

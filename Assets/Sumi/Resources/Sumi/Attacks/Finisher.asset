@@ -27,7 +27,7 @@ MonoBehaviour:
   recoveryMovement: 0.85
   turnSpeed: 360
   hitStop: 0.065
-  cameraKick: 0.22
+  cameraKick: 0.19
   blend: 0.065
   finisher: 1
   lightFollowUp: {fileID: 0}

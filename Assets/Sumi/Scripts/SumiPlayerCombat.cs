@@ -187,6 +187,7 @@ namespace Sumi
                 if(distance>.01f&&distance<FlashDistance+1&&Vector3.Dot(to/distance,dashDir)>.8f)
                     travelDistance=Mathf.Min(travelDistance,Mathf.Max(0,distance-.9f));
             }
+            SumiCombatFeedback.Dash(dashDir);
             SumiCombatFeedback.DashStroke(transform.position,transform.position+dashDir*travelDistance);
         }
         void Enter(SumiCombatState next,string animation,float fade)
@@ -296,7 +297,7 @@ namespace Sumi
         {
             if(steadyHeart)damage*=.8f;health=Mathf.Max(0,health-damage);damageGraceUntil=Time.time+.52f;recovery=stun;
             Enter(health<=0?SumiCombatState.Dead:SumiCombatState.HitStun,health<=0?"Death":"Hit",.045f);
-            SumiCombatFeedback.Hit(.045f,.18f,contact);NotifyDamage();
+            SumiCombatFeedback.Hit(.045f,.26f,contact);NotifyDamage();
         }
         void NotifyDamage(){if(health<=0&&state!=SumiCombatState.Dead)Enter(SumiCombatState.Dead,"Death",.08f);if(SumiGame.I&&SumiGame.I.run)SumiGame.I.run.PlayerDamaged();}
         void FindExecutionTarget()

@@ -33,7 +33,7 @@ public static class SumiCombatAuthoring
             if(move)return move;
             move=ScriptableObject.CreateInstance<SumiAttackDefinition>();move.name=name;move.animationState=state;move.arc=arc;move.duration=duration;move.activeWindow=active;move.linkWindow=link;move.damage=damage;move.lunge=lunge;move.finisher=finisher;
             move.guardCancel=active.y+.025f;move.dodgeCancel=active.y+.015f;move.hitDodgeCancel=active.x+.04f;
-            move.hitStop=finisher?.065f:.04f;move.cameraKick=finisher?.22f:.11f;
+            move.hitStop=finisher?.065f:.04f;move.cameraKick=finisher?.22f:.16f;
             move.Validate();AssetDatabase.CreateAsset(move,path);return move;
         }
         var opening=Move("Opening","Attack1",SumiSwordArc.Descending,.48f,new Vector2(.105f,.255f),new Vector2(.255f,.42f),21,.48f,false);

@@ -65,14 +65,7 @@ namespace Sumi
             {
                 enemies.RemoveAll(e=>!e);
                 if(player.combat.health<=0){EnterEnd(false);return;}
-                // Arrows take a turn in the threat budget. They cannot overlap a melee combo.
-                if(state==SumiRunState.Wave&&Time.time>=nextArrowAt&&!attacker&&Time.time>=nextThreatAt)
-                {
-                    SpawnArrow();
-                    var volley=player&&player.config?player.config.arrowVolley:null;
-                    nextThreatAt=Time.time+(volley!=null?volley.LastImpactAt+.12f:1.12f);
-                    nextArrowAt=Time.time+Random.Range(8.5f,11f);
-                }
+                if(Time.time>=nextArrowAt&&SpawnArrow())nextArrowAt=Time.time+ArrowDelay();
                 if(spawned>0&&AliveCount()==0)
                 {
                     if(state==SumiRunState.Wave)ClearWave();
@@ -91,7 +84,7 @@ namespace Sumi
             int total=plan.shades+plan.retainers,slot=0;
             for(int i=0;i<plan.shades;i++)Spawn(SumiEnemyKind.Shade,slot++,total);
             for(int i=0;i<plan.retainers;i++)Spawn(SumiEnemyKind.Retainer,slot++,total);
-            nextArrowAt=plan.arrows?Time.time+5.2f:float.MaxValue;
+            nextArrowAt=Time.time+4f;
         }
         void ClearWave(){if(Waves[waveIndex-1].upgrade)OpenUpgrade();else Advance();}
         void Advance()
@@ -99,7 +92,7 @@ namespace Sumi
             if(waveIndex<Waves.Length){BeginWave(waveIndex+1);return;}
             state=SumiRunState.BossIntro;stateAt=Time.unscaledTime;player.controllable=false;Banner("A BELL BENEATH THE PAPER",1.8f);
         }
-        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;nextThreatAt=Time.time+.65f;player.controllable=true;Spawn(SumiEnemyKind.Oni,0,1);nextArrowAt=Time.time+8;Banner("THE PAINTED ONI",2.3f);}
+        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;nextThreatAt=Time.time+.65f;player.controllable=true;Spawn(SumiEnemyKind.Oni,0,1);nextArrowAt=Time.time+3.5f;Banner("THE PAINTED ONI",2.3f);}
         void Spawn(SumiEnemyKind kind,int slot,int total)
         {
             var go=new GameObject(kind==SumiEnemyKind.Oni?"Painted Oni":kind==SumiEnemyKind.Shade?"Ink Shade":"Ashen Retainer");go.transform.position=SpawnPoint(slot,total);
@@ -150,7 +143,18 @@ namespace Sumi
         }
         public int OrbitIndex(SumiEnemy e){int i=enemies.IndexOf(e);return i<0?0:i;}
         public void EnemyDied(SumiEnemy enemy){ReleaseAttack(enemy);}
-        void SpawnArrow(){if(!CombatActive||!player.controllable)return;new GameObject("Announced ink arrow").AddComponent<SumiArrowStrike>().Init(player,this);}
+        bool SpawnArrow()
+        {
+            if(!CombatActive||!player.controllable)return false;
+            if(FindFirstObjectByType<SumiArrowStrike>())return false;
+            new GameObject("Announced ink arrow").AddComponent<SumiArrowStrike>().Init(player,this);
+            return true;
+        }
+        float ArrowDelay()
+        {
+            var volley=player&&player.config?player.config.arrowVolley:null;
+            return volley!=null?volley.NextDelay(state==SumiRunState.Boss):state==SumiRunState.Boss?8.5f:10f;
+        }
 
         void OpenUpgrade()
         {

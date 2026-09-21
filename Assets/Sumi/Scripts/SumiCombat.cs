@@ -120,7 +120,8 @@ namespace Sumi
         public static void Block(Vector3 at){Freeze(.025f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.08f);Mark(at,false,false);}
         public static void Parry(Vector3 at,Vector3 axis){Freeze(.075f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.30f);Mark(at,true,true,axis);}
         public static void WaistCut(SumiEnemy enemy,Vector3 at){Mark(new Vector3(enemy.transform.position.x,enemy.transform.position.y+.94f,enemy.transform.position.z),true,false,enemy.transform.right);}
-        public static void Swing(bool fast){Play(fast?3:0);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(fast?.035f:.012f);}
+        public static void Swing(bool fast){Play(fast?3:0);}
+        public static void Dash(Vector3 direction){if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Sway(.17f,direction);}
         public static void EnemySwing(bool fast){Play(fast?3:0);}
         public static void DashStroke(Vector3 from,Vector3 to)
         {

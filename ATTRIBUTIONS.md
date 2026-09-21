@@ -7,6 +7,9 @@
 - Imported audio is under `Assets/Sumi/Resources/Sumi/Audio`. The FLAC was converted to WAV, two 96 kHz recordings were resampled to 44.1 kHz, and trailing silence was trimmed from the hit/parry recordings. The supplied music file is unchanged.
 - The source files did not include license documents. Confirm redistribution rights before publishing a build with these recordings.
 
+## 2026-09-21 arrow volley audio
+- Arrow rain: user-supplied `volley_arrow_3.wav`, copied to `Assets/Sumi/Resources/Sumi/Audio/VolleyArrows.wav`. The clip plays only between the first and last landing. The warning horn is no longer played.
+
 ## Jiayou Akira font
 - Source: https://www.fontspace.com/j-jiayou-akira-font-f112283
 - Supplied in `j-jiayou-akira-font.zip` by the user. Its included `info.txt` says "Freeware, Non-Commercial". The in-game interface uses this font; a commercial release needs a different font or a commercial license.
