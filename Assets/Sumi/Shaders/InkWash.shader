@@ -7,7 +7,7 @@ Shader "Sumi/Ink Wash"
   Pass
   {
    Name "Drawn Surface"
-   Tags { "LightMode"="UniversalForward" }
+   Tags { "LightMode"="UniversalForwardOnly" }
    HLSLPROGRAM
    #pragma vertex vert
    #pragma fragment frag
@@ -17,6 +17,7 @@ Shader "Sumi/Ink Wash"
    #pragma multi_compile_instancing
    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+   #include "WorldAtmosphere.hlsl"
    CBUFFER_START(UnityPerMaterial)
    float4 _BaseColor;float4 _BaseMap_ST;float _Cutoff,_Porosity;
    CBUFFER_END
@@ -42,8 +43,9 @@ Shader "Sumi/Ink Wash"
     float pigment=broad*.62+fine*.38;
     clip(pigment-_Porosity);
     float value=band+(broad-.5)*.09+(fine-.5)*.035-dry*.12-broken*.055+(grain-.5)*.024;
-    float3 ink=_BaseColor.rgb*value;
-    ink=MixFog(ink,i.fog);
+    float3 ink=_BaseColor.rgb*value+float3(.004,.004,.003);
+    ink+=SumiLocalLight(i.positionWS,n)*(_BaseColor.rgb*.85+.018)*value;
+    ink=SumiFog(ink,i.positionWS);
     return half4(ink,1);
    }
    ENDHLSL

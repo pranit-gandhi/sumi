@@ -1,11 +1,22 @@
 ﻿# Sumi asset attributions
 
+## 2026-09-21 shuriken
+
+- Model: `shuriken.blend`, supplied by the user in `shuriken.zip`.
+- Creator: Clint Bellanger.
+- License: Public Domain / CC0, as stated in the supplied `shuriken_credits.txt` retained beside the model.
+- Usage: the untouched Blender source is retained under `SourceArt/Shuriken`; its central `ShurikenStar` mesh is converted losslessly to Unity-native OBJ under `Assets/Sumi/Resources/Sumi/Projectiles`. Project-authored procedural hand, flight, trail and impact animation is applied at runtime.
+
 ## 2026-09-20 music and sword audio
 
 - The user supplied `Samurai.mp3` for the looping background track.
 - The user supplied five sword recordings: `59992__qubodup__swosh-sword-swing.flac` and `160756__cosmicembers__fast-swing-air-woosh.wav` for swings; `109432__black-snow__sword-slice-23.wav` and `27858__erdie__sword04.wav` for hits; and `22428__kibibu__sword_4.wav` for blocks and parries.
 - Imported audio is under `Assets/Sumi/Resources/Sumi/Audio`. The FLAC was converted to WAV, two 96 kHz recordings were resampled to 44.1 kHz, and trailing silence was trimmed from the hit/parry recordings. The supplied music file is unchanged.
 - The source files did not include license documents. Confirm redistribution rights before publishing a build with these recordings.
+
+## 2026-09-21 arrow volley audio
+
+- Arrow rain: user-supplied `volley_arrow_3.wav`, contributed through PR #6 and retained as `Assets/Sumi/Resources/Sumi/Audio/VolleyArrows.wav`. It plays from the first arrow launch through the last landing; the warning horn is not used.
 
 ## Jiayou Akira font
 - Source: https://www.fontspace.com/j-jiayou-akira-font-f112283

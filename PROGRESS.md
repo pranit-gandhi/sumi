@@ -1,6 +1,12 @@
 # Sumi progress
 
-Updated 2026-09-20. Current milestone: enemy combat challenge iteration.
+Updated 2026-09-21. Current milestone: shuriken presentation.
+
+## 2026-09-21 shuriken presentation
+
+- `F` now performs a 1.08-second authored shuriken throw instead of firing the old ink sphere. The ronin gathers the supplied CC0 star at the hip, coils beside the shoulder, snaps the off hand forward with humanoid IK and follows through across the body while the sword hand remains undisturbed.
+- Flight uses the supplied Clint Bellanger model with a drawn-steel treatment, fast axial spin, a clean ink-and-paper wake, brief camera tracking, hit-stop and a restrained impact seal with brush splinters. The effect intentionally has no new sound; audio can be layered onto the release and impact later.
+- The former Split Ink, Deep Ink and Quick Ink upgrades are now Twin Stars, Deep Cut and Quick Draw while retaining their established gameplay effects and cooldown balance.
 
 ## 2026-09-20 enemy combat challenge
 
@@ -39,7 +45,7 @@ See `COMBAT.md` for combat rules, tuning locations and the verification command.
 - Complete arena run: introduction, two enemy waves, a randomized three-of-eight upgrade choice after each wave, Painted Oni boss, victory/death, pause and immediate restart.
 - The old corridor is now a rounded four-gate paper courtyard. Its clear center is surrounded by repeated ink huts, torii, lanterns, dry-brush shrubs, pines, shrine geometry and distant mountain washes. Enemies enter from the four cardinal sides.
 - The active player remains the real skinned Humanoid ronin with reduced kasa, shadowed face, layered kimono/hakama, moving haori and one katana. Do not run `SumiHumanoidBuild.Build`; use `SumiCharacterArt.Apply` only for intentional character regeneration.
-- Controls: WASD walk, Shift jog, Left Mouse shoulder cut, Right Mouse hold/timed deflection, Space Brush Flash, Q lock-on, E execution, Esc pause, R restart after death/victory.
+- Controls: WASD walk, Shift jog, Left Mouse shoulder cut, Right Mouse hold guard, Q timed deflection, Space Brush Flash, Tab lock-on, E execution, Esc pause, R restart after death/victory.
 
 ## Combat and run systems
 
@@ -58,7 +64,7 @@ See `COMBAT.md` for combat rules, tuning locations and the verification command.
 ## Smoothness and performance
 
 - Enemy recovery crossfades to locomotion instead of holding the final attack pose. Normal attacks no longer continuously home, and combat startup retains some approach momentum.
-- Camera impulse is applied after a separate smoothed pose, preventing shake feedback; impulse motion uses stable 19–23 Hz frequencies.
+- Camera impulse is applied after a separate smoothed pose, preventing shake feedback. Single hits, parries, dashes and deaths read strongly, while combo follow-ups taper to 55% and then 36% so chained hits do not sustain a dizzying shake.
 - The rebuilt arena has about 701 MeshRenderers versus roughly 3,731 before. Static windless drawings stop updating property blocks, and the contour shader includes GPU-instancing variants.
 
 ## Recorded verification

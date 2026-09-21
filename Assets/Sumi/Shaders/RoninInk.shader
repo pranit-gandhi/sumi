@@ -10,6 +10,10 @@ Shader "Sumi/Ronin Ink"
   _CutEnabled("Stylized split enabled",Range(0,1))=0
   _CutY("Stylized split world height",Float)=0
   _CutSide("Stylized split side",Float)=1
+  _Dissolve("Ink vapor",Range(0,1))=0
+  _DissolveSeed("Ink vapor seed",Float)=0
+  _DissolveWound("Wound origin",Vector)=(0,0,0,0)
+  _DeathWound("Fatal injury origin",Vector)=(0,0,0,0)
  }
  SubShader {
   Tags {"RenderPipeline"="UniversalPipeline" "RenderType"="Opaque"}
@@ -23,7 +27,7 @@ Shader "Sumi/Ronin Ink"
    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
    CBUFFER_START(UnityPerMaterial)
    float4 _BaseColor,_Ink;float _Density,_Gold,_Red,_AccentMask;
-   float _CutEnabled,_CutY,_CutSide;
+   float _CutEnabled,_CutY,_CutSide,_Dissolve,_DissolveSeed;float4 _DissolveWound,_DeathWound;
    CBUFFER_END
    struct A {float4 p:POSITION;float3 n:NORMAL;float2 uv:TEXCOORD0;float4 color:COLOR;};
    struct V {float4 p:SV_POSITION;float3 n:TEXCOORD0;float2 uv:TEXCOORD1;float fog:TEXCOORD2;float3 world:TEXCOORD3;float4 color:COLOR;};
@@ -42,6 +46,16 @@ Shader "Sumi/Ronin Ink"
    }
    half4 frag(V i):SV_Target {
     if(_CutEnabled>.5)clip((i.world.y-_CutY)*_CutSide);
+    float vapor=0,soak=0;
+    if(_Dissolve>.001)
+    {
+     float n0=noise(i.uv*17+_DissolveSeed)+noise(i.uv*41+_DissolveSeed*.7)*.45+noise(i.world.xz*2.4+_DissolveSeed)*.2;
+     float woundDistance=distance(i.world,_DissolveWound.xyz);
+     float front=saturate((woundDistance+.15)*.58);
+     vapor=saturate(n0*.22+front*.68);
+     soak=saturate((_Dissolve-vapor+.18)*5);
+     clip(vapor-_Dissolve*1.12);
+    }
     float3 n=normalize(i.n),eye=normalize(_WorldSpaceCameraPos-i.world);
     float shade=saturate(dot(n,normalize(float3(-.6,.75,-.32)))*.5+.5);
     float wash=noise(i.uv*8.7+3.1)*.7+noise(i.uv*21.3)*.3;
@@ -61,7 +75,9 @@ Shader "Sumi/Ronin Ink"
     c=lerp(c,float3(.65,.38,.055),saturate(_Gold)*accent);
     // Red replaces pigment locally, never interpolates gold and red together.
     float injury=saturate(_Red)*smoothstep(.43,.65,noise(i.uv*7+8));
+    if(_DeathWound.w>.5)injury*=1-smoothstep(.18,.85,distance(i.world,_DeathWound.xyz));
     c=lerp(c,float3(.33,.012,.024),injury);
+    if(_Dissolve>.001)c=lerp(c,_Ink.rgb,soak);
     return half4(MixFog(c,i.fog),1);
    }
    ENDHLSL

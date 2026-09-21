@@ -44,7 +44,7 @@ public static class SumiCombatVerification
     static void Finish(Exception error)
     {
         EditorApplication.update-=Step;suite=null;
-        if(player){player.injectedGuard=false;player.injectedMove=Vector2.zero;player.injectedAttack=false;player.injectedDash=false;player.enabled=true;}
+        if(player){player.injectedGuard=false;player.injectedParry=false;player.injectedMove=Vector2.zero;player.injectedAttack=false;player.injectedDash=false;player.enabled=true;}
         SumiTime.Reset();
         string report=(error==null?"PASS":"FAIL")+"\n"+string.Join("\n",results)+(error==null?"":"\n"+error);
         Directory.CreateDirectory("Logs");File.WriteAllText("Logs/combat-verification.txt",report);
@@ -62,7 +62,7 @@ public static class SumiCombatVerification
     static void ResetPlayer()
     {
         SumiTime.Reset();player.enabled=false;player.controllable=true;player.combat.health=player.combat.maxHealth;
-        player.injectedAttack=player.injectedHeavy=player.injectedDash=player.injectedGuard=player.injectedGuardPressed=false;
+        player.injectedAttack=player.injectedHeavy=player.injectedDash=player.injectedGuard=player.injectedParry=false;
         player.injectedMove=Vector2.zero;player.locked=false;player.target=null;player.combat.ClearInput();
         Call(player.combat,"Enter",SumiCombatState.Free,"Locomotion",.05f);
         Set(player.combat,"damageGraceUntil",0f);player.velocity=Vector3.zero;
@@ -85,8 +85,14 @@ public static class SumiCombatVerification
 
     static IEnumerator Checks()
     {
+        if(run.state==SumiRunState.Title)
+        {
+            run.DebugBeginJourney();yield return null;
+            Check(run.state==SumiRunState.Intro&&Time.timeScale==1,"Begin Journey leaves the title screen and restores time");
+        }
         StartWave(1);yield return null;
         var retainer=SumiEnemy.Active.First(e=>!e.dead);
+        Check(Mathf.Approximately(SumiCombatFeedback.ComboShakeScale(1),1f)&&SumiCombatFeedback.ComboShakeScale(2)<.6f&&SumiCombatFeedback.ComboShakeScale(3)<.4f,"Combo follow-ups progressively reduce camera impulse");
         foreach(var e in SumiEnemy.Active.ToArray())e.enabled=false;
         StartEnemy(retainer,SumiEnemyAttack.RetainerCut);
         player.combat.state=SumiCombatState.GuardHeld;
@@ -96,10 +102,12 @@ public static class SumiCombatVerification
         Check(retainer.health==enemyHp&&retainer.state==SumiEnemyState.Windup,"Held guard does not damage or interrupt enemy");
 
         ResetPlayer();StartEnemy(retainer,SumiEnemyAttack.RetainerCut);
-        player.combat.state=SumiCombatState.GuardStartup;Set(player.combat,"elapsed",.08f);
+        player.combat.Tick(Vector2.zero,false,false,true,false);Set(player.combat,"elapsed",.08f);
+        Check(player.combat.state==SumiCombatState.GuardStartup,"Dedicated parry input enters its own timed stance without holding guard");
         player.combat.ReceiveEnemyHit(16,0,retainer,player.transform.position+Vector3.up);
         Check(player.combat.health==player.combat.maxHealth&&retainer.health==enemyHp-12,"Perfect deflection avoids damage and retaliates");
-        Check(retainer.state==SumiEnemyState.Recoil&&Mathf.Approximately((float)retainer.GetType().GetField("recoilDuration",Private).GetValue(retainer),.95f),"Deflection grants a reliable punish window");
+        Check(retainer.state==SumiEnemyState.Recoil&&retainer.Deflected&&Mathf.Approximately((float)retainer.GetType().GetField("recoilDuration",Private).GetValue(retainer),.95f),"Deflection grants a visible knocked-aside punish window");
+        Check(((Vector3)retainer.GetType().GetField("velocity",Private).GetValue(retainer)).magnitude>2,"Deflection immediately changes enemy momentum");
         Set(retainer,"elapsed",.20f);retainer.TakeHit(1,Vector3.forward,SumiHitKind.ShoulderCut);
         Check(Mathf.Approximately(retainer.StateTime,.20f),"A hit during recoil does not start another reaction");
 
@@ -119,7 +127,7 @@ public static class SumiCombatVerification
         retainer.enabled=true;player.combat.Tick(Vector2.zero,false,false,false,false,false,false,true);
         float heavyEnd=Time.time+.65f;
         while(Time.time<heavyEnd){player.combat.Tick(Vector2.zero,false,false,false,false);yield return null;}
-        Check(Mathf.Approximately(retainer.health,retainer.maxHealth-player.combat.heavy.damage),"Actual player heavy blade trace hits exactly once");
+        Check(Mathf.Approximately(retainer.health,retainer.maxHealth-player.combat.heavy.damage),$"Actual player heavy blade trace hits exactly once (hp={retainer.health}, player={player.transform.position}, enemy={retainer.transform.position}, confirmed={player.combat.HitConfirmed})");
         Check(retainer.state==SumiEnemyState.Recoil,"Actual heavy input breaks enemy bracing");retainer.enabled=false;
 
         ResetPlayer();StartEnemy(retainer,SumiEnemyAttack.RetainerCut);
@@ -223,11 +231,17 @@ public static class SumiCombatVerification
             yield return null;
         }
         Check(sweepStruck,$"Live Oni sweep connects through passive guard (state={oni.state}, health={player.combat.health}, time={oni.StateTime:0.00})");
-        player.injectedGuard=false;oni.Execute();yield return null;yield return null;
+        player.injectedGuard=false;oni.Execute();
+        float scaleUntil=Time.unscaledTime+1.2f;while(Time.timeScale<1f&&Time.unscaledTime<scaleUntil)yield return null;
+        yield return null;
         Check(run.state==SumiRunState.Victory&&Time.timeScale==1,"Boss death reaches victory and restores time");
 
         StartWave(1);player.combat.ReceiveWorldHit(999,Vector3.up);yield return null;
         Check(run.state==SumiRunState.Death&&player.combat.state==SumiCombatState.Dead,"Lethal damage reaches death and locks combat");
+        float settle=Time.unscaledTime+1.15f;while(Time.unscaledTime<settle)yield return null;
+        Check(player.transform.position.y>-.5f&&player.transform.position.y<2.2f,"Player death remains on the courtyard");
+        Check(player.GetComponent<SumiDeathActor>(),"Player death runs the cinematic actor");
+        Check(SumiDeath.CanSkip,"Death skip is available after the mandatory beat");
         run.DebugRestart();yield return null;yield return null;
         run=Object.FindFirstObjectByType<SumiRunDirector>();player=Object.FindFirstObjectByType<SumiPlayer>();
         Check(run&&run.state==SumiRunState.Intro&&player.combat.health==100&&Time.timeScale==1,"Restart creates a fresh run and resets combat time");

@@ -8,7 +8,9 @@ The controller already owned combat before this revision. Its rigid feel came fr
 - R / Middle Mouse: a slower overhead heavy. Either opening light can branch into it.
 - WASD: footwork during startup, contact and recovery; input can steer the next cut.
 - Space: Brush Flash. On a whiff, it cancels after contact finishes; after a confirmed hit it can cancel earlier. Flash can link back into a light or heavy.
-- Right Mouse: hold to guard; a fresh press just before an incoming frontal hit gives a perfect parry. Holding through attack recovery grants guard when legal, without a delayed perfect parry.
+- F: 1.08-second shuriken throw with a deliberate gather, shoulder coil, release and follow-through. Release occurs at 0.58 seconds; Brush Flash can cancel the late recovery.
+- Right Mouse: hold to guard. Guard mitigates frontal blockable damage but never creates a perfect parry.
+- Q: dedicated parry. Its 0.025–0.16-second perfect window deflects a frontal blockable strike; the committed pose then recovers or flows into held guard.
 - F3: optional development overlay for action time, active/link/cancel status and buffered input.
 
 There is still only one player resource: health. Held guard takes chip damage. Perfect parries avoid damage and recoil the enemy. Guard requires the enemy to be in the forward half-plane.

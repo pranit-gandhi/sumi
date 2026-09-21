@@ -20,16 +20,18 @@ namespace Sumi
         public bool Attacking=>state==SumiEnemyState.Windup||state==SumiEnemyState.Strike;
         public bool ReadyToAttack=>!dead&&state==SumiEnemyState.Approach&&Time.time>=nextAttackAt;
         public float EngagementRange=>kind==SumiEnemyKind.Shade?3.1f:kind==SumiEnemyKind.Oni?3.15f:2.7f;
-        public float PoseWeight=>Attacking?Mathf.Clamp01(elapsed/.10f):state==SumiEnemyState.Recovery?1-Mathf.Clamp01(elapsed/.18f):0;
+        public bool Deflected=>state==SumiEnemyState.Recoil&&deflected;
+        public float PoseWeight=>Attacking?Mathf.Clamp01(elapsed/.10f):state==SumiEnemyState.Recovery?1-Mathf.Clamp01(elapsed/.18f):Deflected?1-Mathf.SmoothStep(0,1,elapsed/recoilDuration):0;
         public float WindupDuration=>CurrentAttack==null?0:CurrentAttack.windup;
 
         SumiPlayer player;
         SumiRunDirector director;
         CharacterController body;
-        Vector3 velocity,smoothVelocity,attackDirection,retreatDirection;
+        Vector3 velocity,smoothVelocity,attackDirection,retreatDirection,recoilDirection;
+        Quaternion visualRest;
         float elapsed,nextAttackAt,lastLunge,recoilDuration=.3f,staggerReadyAt,clipLength=1.2f;
         int attackCount;
-        bool struck,hasToken,phasePending;
+        bool struck,hasToken,phasePending,deflected;float recoilSpeed,deflectSide;
         LineRenderer warning;
         readonly Vector3[] warningPoints=new Vector3[27];
         static readonly int Speed=Animator.StringToHash("Speed"),AttackRate=Animator.StringToHash("AttackRate");
@@ -44,7 +46,7 @@ namespace Sumi
             maxHealth=health=kind==SumiEnemyKind.Oni?340:kind==SumiEnemyKind.Shade?64:90;
             body=gameObject.AddComponent<CharacterController>();body.height=kind==SumiEnemyKind.Oni?2.35f:1.85f;
             body.radius=kind==SumiEnemyKind.Oni?.48f:.36f;body.center=new Vector3(0,body.height*.51f,0);body.stepOffset=.18f;
-            visual=Instantiate(Resources.Load<GameObject>("Ronin/Humanoid"),transform,false).transform;
+            visual=Instantiate(Resources.Load<GameObject>("Ronin/Humanoid"),transform,false).transform;visualRest=visual.localRotation;
             animator=visual.GetComponent<Animator>();animator.applyRootMotion=false;SumiEnemyAppearance.Apply(visual,kind);
             var clip=Resources.Load<AnimationClip>("Ronin/Sword_Attack");if(clip)clipLength=clip.length;
             visual.gameObject.AddComponent<SumiEnemyBlade>().Init(this);
@@ -94,10 +96,13 @@ namespace Sumi
                     if(elapsed>=CurrentAttack.recovery){CurrentAttack=null;Enter(SumiEnemyState.Approach);}
                     break;
                 case SumiEnemyState.Recoil:
-                    SmoothMove(-dir*.32f,dt);
+                    recoilSpeed=Mathf.MoveTowards(recoilSpeed,deflected?.5f:.25f,dt*(deflected?5.2f:3f));
+                    SmoothMove(recoilDirection*recoilSpeed,dt);
                     if(elapsed>=recoilDuration){CurrentAttack=null;Enter(SumiEnemyState.Approach);}
                     break;
             }
+            float lean=Deflected?Mathf.Sin(Mathf.Clamp01(elapsed/recoilDuration)*Mathf.PI):0;
+            visual.localRotation=Quaternion.Slerp(visual.localRotation,visualRest*Quaternion.Euler(-lean*9f,0,lean*deflectSide*16f),1-Mathf.Exp(-18f*dt));
             animator.SetFloat(Speed,Mathf.Min(velocity.magnitude,2.8f),.14f,dt);
             UpdateWarning();
         }
@@ -133,6 +138,9 @@ namespace Sumi
 
         void BeginAttack(SumiEnemyAttack attack)
         {
+            // A new committed windup plants the feet; no residual approach or deflection
+            // momentum is allowed to slide the attacker out of its warned contact volume.
+            velocity=Vector3.zero;smoothVelocity=Vector3.zero;recoilSpeed=0;
             CurrentAttack=attack;attackDirection=transform.forward;Enter(SumiEnemyState.Windup);
             animator.SetFloat(AttackRate,clipLength*.25f/attack.windup);
             animator.CrossFadeInFixedTime(Animator.StringToHash("Base Layer."+(attack.arc==SumiSwordArc.Overhead?"HeavyAttack":"Attack1")),.08f,0,0);
@@ -167,6 +175,7 @@ namespace Sumi
 
         void Enter(SumiEnemyState next)
         {
+            if(next!=SumiEnemyState.Recoil)deflected=false;
             state=next;elapsed=0;lastLunge=0;struck=false;
             if(next==SumiEnemyState.Strike)
             {
@@ -187,9 +196,23 @@ namespace Sumi
 
         public void TakeHit(float damage,Vector3 direction,SumiHitKind hitKind)
         {
+            TakeHit(damage,direction,hitKind,transform.position+Vector3.up*1.2f,hitKind==SumiHitKind.DashCut?SumiSwordArc.Sweep:hitKind==SumiHitKind.HeavyCut?SumiSwordArc.Overhead:hitKind==SumiHitKind.Finisher?SumiSwordArc.Sweep:SumiSwordArc.Descending);
+        }
+        public void TakeHit(float damage,Vector3 direction,SumiHitKind hitKind,Vector3 hitPoint,SumiSwordArc arc)
+        {
+            TakeHit(damage,direction,hitKind,hitPoint,arc,direction);
+        }
+        public void TakeHit(float damage,Vector3 direction,SumiHitKind hitKind,Vector3 hitPoint,SumiSwordArc arc,Vector3 cut)
+        {
             if(dead)return;
             health-=damage;
-            if(health<=0){Die(hitKind==SumiHitKind.DashCut);return;}
+            if(health<=0)
+            {
+                bool split=hitKind==SumiHitKind.DashCut&&kind!=SumiEnemyKind.Oni;
+                Vector3 attacker=player?player.transform.position:transform.position-direction;
+                Die(SumiFatalHit.Make(transform,attacker,hitPoint,direction,cut.sqrMagnitude>.001f?cut:direction,damage,hitKind,arc,false,kind==SumiEnemyKind.Oni,split));
+                return;
+            }
             if(kind==SumiEnemyKind.Oni&&!Enraged&&health<=maxHealth*.55f)phasePending=true;
             bool strong=hitKind==SumiHitKind.HeavyCut||hitKind==SumiHitKind.Finisher;
             // Bracing resists light hits, but takes full damage. Heavy cuts break the windup.
@@ -199,27 +222,40 @@ namespace Sumi
             if(state==SumiEnemyState.Recovery||state==SumiEnemyState.Recoil)return;
             if(!strong&&Time.time<staggerReadyAt)return;
             staggerReadyAt=Time.time+(kind==SumiEnemyKind.Oni?1.25f:.85f);
-            Recoil(strong?.58f:.28f);
+            Recoil(strong?.58f:.28f,false);
         }
 
         public void Parried(bool perfect)
         {
             if(!perfect||dead)return;
-            health-=12;if(health<=0){Die(false);return;}
+            health-=12;if(health<=0)
+            {
+                Vector3 dir=player?(transform.position-player.transform.position).normalized:transform.forward;
+                Die(SumiFatalHit.Make(transform,player?player.transform.position:transform.position,transform.position+Vector3.up*1.2f,dir,dir,12,SumiHitKind.Finisher,SumiSwordArc.Descending,false,kind==SumiEnemyKind.Oni,false));
+                return;
+            }
             if(kind==SumiEnemyKind.Oni&&!Enraged&&health<=maxHealth*.55f)phasePending=true;
-            Recoil(.95f);director.CombatHint("OPENING  —  STRIKE",.85f);
+            Recoil(.95f,true);director.CombatHint("DEFLECTED  —  STRIKE",.85f);
         }
 
-        void Recoil(float duration)
+        void Recoil(float duration,bool wasDeflected=false)
         {
             ReleaseToken();recoilDuration=duration;nextAttackAt=Time.time+duration+.18f;
-            velocity=Vector3.zero;smoothVelocity=Vector3.zero;CurrentAttack=null;
+            deflected=wasDeflected;Vector3 away=player?transform.position-player.transform.position:transform.forward;away.y=0;
+            recoilDirection=away.sqrMagnitude>.001f?away.normalized:transform.forward;recoilSpeed=wasDeflected?(kind==SumiEnemyKind.Oni?2.8f:4.8f):.65f;
+            deflectSide=Vector3.Dot(transform.right,recoilDirection)>=0?1:-1;
+            velocity=recoilDirection*recoilSpeed;smoothVelocity=Vector3.zero;CurrentAttack=null;
             Enter(SumiEnemyState.Recoil);if(warning)warning.enabled=false;
         }
 
         public void GetSwordPose(out Vector3 grip,out Vector3 line)
         {
-            if(CurrentAttack==null){grip=transform.position+Vector3.up*1.3f;line=transform.forward;return;}
+            if(CurrentAttack==null)
+            {
+                if(Deflected){grip=transform.TransformPoint(new Vector3(.34f,1.24f,.02f));line=transform.TransformDirection(new Vector3(.78f,.52f,-.22f)).normalized;}
+                else {grip=transform.position+Vector3.up*1.3f;line=transform.forward;}
+                return;
+            }
             float t=state==SumiEnemyState.Windup?0:state==SumiEnemyState.Recovery?1:Mathf.InverseLerp(0,CurrentAttack.strike,elapsed);
             CurrentAttack.LocalPose(t,out grip,out line);
             float scale=kind==SumiEnemyKind.Oni?1.32f:kind==SumiEnemyKind.Shade?.96f:1.04f;
@@ -244,14 +280,21 @@ namespace Sumi
             warningPoints[warningPoints.Length-1]=origin;warning.SetPositions(warningPoints);
         }
 
-        public void Execute(){if(dead)return;health=0;Die(false);}
-        void Die(bool split)
+        public void Execute()
         {
+            if(dead)return;health=0;
+            Vector3 dir=player?(transform.position-player.transform.position).normalized:transform.forward;
+            var hit=SumiFatalHit.Make(transform,player?player.transform.position:transform.position,transform.position+Vector3.up*1.15f,dir,Vector3.up,40,SumiHitKind.Finisher,SumiSwordArc.Overhead,false,kind==SumiEnemyKind.Oni,false);
+            hit.deathArc=SumiDeathArc.Rear;Die(hit);
+        }
+        void Die(in SumiFatalHit hit)
+        {
+            if(dead)return;
             dead=true;ReleaseToken();state=SumiEnemyState.Dead;CurrentAttack=null;if(warning)warning.enabled=false;
-            if(body)body.enabled=false;
-            if(split&&kind!=SumiEnemyKind.Oni)SplitAtWaist();else animator.CrossFadeInFixedTime("Death",.08f);
-            if(player.target==transform){player.target=null;player.locked=false;}
-            if(director)director.EnemyDied(this);Destroy(gameObject,2.4f);
+            if(hit.split&&kind!=SumiEnemyKind.Oni)SplitAtWaist();
+            if(player&&player.target==transform){player.target=null;player.locked=false;}
+            if(director)director.EnemyDied(this);
+            SumiDeath.BeginEnemy(this,hit);
         }
         void ReleaseToken(){if(hasToken&&director)director.ReleaseAttack(this);hasToken=false;}
         void SplitAtWaist()

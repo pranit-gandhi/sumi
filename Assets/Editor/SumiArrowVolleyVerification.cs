@@ -8,7 +8,6 @@ using UnityEngine;
 using Sumi;
 using Object=UnityEngine.Object;
 
-// Focused authoring/verification entry points for the runtime-built shrine scene.
 public static class SumiArrowVolleyVerification
 {
     static IEnumerator suite;static double deadline;static int lastFrame;static readonly List<string> results=new List<string>();
@@ -18,7 +17,7 @@ public static class SumiArrowVolleyVerification
     public static void Preview()
     {
         RequirePlayMode();var player=Object.FindFirstObjectByType<SumiPlayer>();var run=Object.FindFirstObjectByType<SumiRunDirector>();
-        EnsureArrowWave(run);new GameObject("Authoring arrow volley").AddComponent<SumiArrowStrike>().Init(player,run);
+        EnsureCombat(run);new GameObject("Authoring arrow volley").AddComponent<SumiArrowStrike>().Init(player,run);
     }
 
     [MenuItem("Sumi/Verify Arrow Volley (Play Mode)")]
@@ -31,27 +30,21 @@ public static class SumiArrowVolleyVerification
 
     static IEnumerator Checks()
     {
-        var player=Object.FindFirstObjectByType<SumiPlayer>();var run=Object.FindFirstObjectByType<SumiRunDirector>();EnsureArrowWave(run);
+        var player=Object.FindFirstObjectByType<SumiPlayer>();var run=Object.FindFirstObjectByType<SumiRunDirector>();EnsureCombat(run);
         foreach(var old in Object.FindObjectsByType<SumiArrowStrike>(FindObjectsSortMode.None))Object.DestroyImmediate(old.gameObject);
         var volley=new GameObject("Verified arrow volley").AddComponent<SumiArrowStrike>();volley.Init(player,run);
-        var tuning=player.config.arrowVolley;int expected=tuning.waveCount*tuning.gameplayArrowsPerWave;
-        Check(volley.PredictedGameplayLandings.Count==expected,"gameplay landing count is committed from wave tuning");
-        var committed=new Vector3[expected];for(int i=0;i<expected;i++)committed[i]=volley.PredictedGameplayLandings[i];
-        Check(Object.FindObjectsByType<SumiArrowStrike>(FindObjectsSortMode.None).Length==1,"one controller owns the full barrage");
-        var seen=new HashSet<SumiVolleyState>();float until=Time.time+tuning.LastImpactAt+.12f;
+        var tuning=player.config.arrowVolley;
+        Check(volley.PredictedGameplayLandings.Count==tuning.arrowCount,"landing count matches the warned volley");
+        Check(Object.FindObjectsByType<SumiArrowStrike>(FindObjectsSortMode.None).Length==1,"one controller owns the warned circle");
+        var seen=new HashSet<SumiVolleyState>();float until=Time.time+tuning.TotalDuration+.2f;
         while(volley&&Time.time<until){seen.Add(volley.State);yield return null;}
-        Check(volley&&seen.Contains(SumiVolleyState.Telegraph)&&seen.Contains(SumiVolleyState.Ascending)&&seen.Contains(SumiVolleyState.Apex)&&seen.Contains(SumiVolleyState.Descending),"timeline exposes anticipation, ascent, apex and descent");
-        bool unchanged=volley&&volley.PredictedGameplayLandings.Count==committed.Length;
-        if(unchanged)for(int i=0;i<committed.Length;i++)if(volley.PredictedGameplayLandings[i]!=committed[i]){unchanged=false;break;}
-        Check(unchanged,"landing positions never home or re-randomize during flight");
-        Check(GameObject.Find("Pooled embedded battlefield arrows")!=null,"landed arrows convert into the capped embedded field");
-        until=Time.time+tuning.impactDuration+tuning.recoveryDuration+.3f;while(volley&&Time.time<until)yield return null;
-        Check(!volley,"volley controller cleans up after recovery while embedded arrows remain pooled");
+        Check(seen.Contains(SumiVolleyState.Telegraph)&&seen.Contains(SumiVolleyState.Falling)&&seen.Contains(SumiVolleyState.Fade),"timeline exposes warning fill, staggered fall and fade");
+        Check(!volley,"volley controller cleans up after the fade");
     }
 
-    static void EnsureArrowWave(SumiRunDirector run)
+    static void EnsureCombat(SumiRunDirector run)
     {
-        if(run.state!=SumiRunState.Wave)run.GetType().GetMethod("BeginWave",Private).Invoke(run,new object[]{3});
+        if(run.state!=SumiRunState.Wave&&run.state!=SumiRunState.Boss)run.GetType().GetMethod("BeginWave",Private).Invoke(run,new object[]{1});
         run.GetType().GetField("nextArrowAt",Private).SetValue(run,Time.time+999f);
     }
     static void RequirePlayMode(){if(!EditorApplication.isPlaying)throw new InvalidOperationException("Enter Play Mode first.");}

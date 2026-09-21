@@ -9,7 +9,7 @@ namespace Sumi
         public Transform target;public bool locked,controllable=true;
         public Vector3 velocity;public Vector2 injectedMove;
         // Automation hooks; normally false. They allow Play Mode verification to exercise the same input path as players.
-        public bool injectedAttack,injectedGuard,injectedGuardPressed,injectedDash,injectedJog,injectedHeavy;
+        public bool injectedAttack,injectedGuard,injectedParry,injectedDash,injectedJog,injectedHeavy;
         public bool jogHeld;
         public float dodgeRemaining,dodgeReady,gravity;
         Vector3 dodgeDirection,combatMoveVelocity;
@@ -30,15 +30,16 @@ namespace Sumi
                 var mouse=Mouse.current;
                 bool attack=injectedAttack||(controllable&&mouse!=null&&mouse.leftButton.wasPressedThisFrame);
                 jogHeld=injectedJog||(controllable&&keyboard!=null&&(keyboard.leftShiftKey.isPressed||keyboard.rightShiftKey.isPressed));
-                bool guard=injectedGuard||(controllable&&mouse!=null&&mouse.rightButton.isPressed);
-                bool guardPressed=injectedGuardPressed||(controllable&&mouse!=null&&mouse.rightButton.wasPressedThisFrame);
+                // Held guard remains available to verification via injectedGuard; players use Q or RMB to parry.
+                bool guard=injectedGuard;
+                bool parry=injectedParry||(controllable&&((keyboard!=null&&keyboard.qKey.wasPressedThisFrame)||(mouse!=null&&mouse.rightButton.wasPressedThisFrame)));
                 bool dash=injectedDash||(controllable&&keyboard!=null&&keyboard.spaceKey.wasPressedThisFrame);
                 bool execute=controllable&&keyboard!=null&&keyboard.eKey.wasPressedThisFrame;
-                bool throwInk=controllable&&keyboard!=null&&keyboard.fKey.wasPressedThisFrame;
+                bool throwShuriken=controllable&&keyboard!=null&&keyboard.fKey.wasPressedThisFrame;
                 bool heavy=injectedHeavy||(controllable&&((keyboard!=null&&keyboard.rKey.wasPressedThisFrame)||(mouse!=null&&mouse.middleButton.wasPressedThisFrame)));
                 if(keyboard!=null&&keyboard.f3Key.wasPressedThisFrame)combat.showCombatDebug=!combat.showCombatDebug;
-                injectedAttack=false;injectedGuardPressed=false;injectedDash=false;injectedHeavy=false;
-                combat.Tick(axis,attack,guard,guardPressed,dash,execute,throwInk,heavy);return;
+                injectedAttack=false;injectedParry=false;injectedDash=false;injectedHeavy=false;
+                combat.Tick(axis,attack,guard,parry,dash,execute,throwShuriken,heavy);return;
             }
             Vector3 desired=WorldDirection(axis);
             if(controllable&&keyboard!=null&&keyboard.spaceKey.wasPressedThisFrame)Dodge(desired);

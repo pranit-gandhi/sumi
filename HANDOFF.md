@@ -14,9 +14,9 @@ Earlier handoff sections below record the previous release and may describe supe
 
 ## Current PR #2 refinement
 
-PR #2 remains the current implementation: its data-driven three-cut chain, heavy attack, Brush Flash, swept-blade contact, health-only rules, ink dart, spell wheel, HUD, Japanese-style font, run structure, and visuals are intact. Three narrowly selected ideas from PR #1 were manually adapted: eased lock-on with mouse authority and target cycling, a shared live-enemy registry, and rig-measured reach-limited two-hand IK. PR #1 was not merged or cherry-picked.
+PR #2 remains the current implementation: its data-driven three-cut chain, heavy attack, Brush Flash, swept-blade contact, health-only rules, shuriken throw, spell wheel, HUD, Japanese-style font, run structure, and visuals are intact. Three narrowly selected ideas from PR #1 were manually adapted: eased lock-on with mouse authority and target cycling, a shared live-enemy registry, and rig-measured reach-limited two-hand IK. PR #1 was not merged or cherry-picked.
 
-Use Q to acquire/release lock and the mouse wheel to cycle visible targets while locked. The camera releases a dead or distant target automatically. `SumiEnemy.Active` is maintained by `OnEnable`/`OnDisable`; use it for live-enemy queries instead of scene-wide searches. `SumiGuardIK` in `Assets/Sumi/Scripts/SumiHumanoidRonin.cs` clamps hand goals to the measured arm envelope and slides/releases the off hand when a cut exceeds comfortable reach.
+Use Tab to acquire/release lock and the mouse wheel to cycle visible targets while locked. Q is the dedicated parry; Right Mouse is guard-only. The camera releases a dead or distant target automatically. `SumiEnemy.Active` is maintained by `OnEnable`/`OnDisable`; use it for live-enemy queries instead of scene-wide searches. `SumiGuardIK` in `Assets/Sumi/Scripts/SumiHumanoidRonin.cs` clamps hand goals to the measured arm envelope and shares that resolved grip with the katana root.
 
 Latest focused check: Unity 6000.2.14f1 compiled, Play Mode started, the active arena/player/enemy rendered, and the active Editor log contained no new Sumi exception. The fresh WebGL build succeeded; regenerated `Builds/Sumi-itch.zip` is 30,740,030 compressed bytes and 31,200,656 extracted bytes across 17 files, with root `index.html` and a 20,710,151-byte largest file. Unity AI account/licensing 404 warnings remain external.
 
@@ -40,9 +40,9 @@ Controls:
 
 - WASD move; Shift jog
 - Left Mouse descending shoulder cut
-- Right Mouse hold guard / timed perfect deflection
+- Right Mouse hold guard; Q timed perfect deflection
 - Space Brush Flash dash cut
-- Q target lock
+- Tab target lock
 - E execute a posture-broken enemy
 - Esc pause; R restart after death/victory
 

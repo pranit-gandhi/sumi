@@ -6,23 +6,34 @@ namespace Sumi
     public class SumiGame : MonoBehaviour
     {
         public static SumiGame I; public SumiConfig config;public SumiPlayer player; public SumiCamera view;public SumiRunDirector run;
-        AudioSource music;bool musicPaused;
+        AudioSource music;AudioLowPassFilter musicFilter;AudioClip combatTrack,titleTrack;bool musicPaused,onTitleMusic;
         void Awake()
         {
             I=this;Application.targetFrameRate=60;QualitySettings.vSyncCount=0;
             if(!config)config=Resources.Load<SumiConfig>("Sumi/Combat");
             var p=new GameObject("Ronin");p.transform.position=new Vector3(0,.10f,-3);player=p.AddComponent<SumiPlayer>();player.Init(config);
             var cam=Camera.main;if(!cam){cam=new GameObject("Main Camera",typeof(Camera),typeof(AudioListener)).GetComponent<Camera>();cam.tag="MainCamera";}
-            cam.backgroundColor=RenderSettings.fogColor;cam.clearFlags=CameraClearFlags.SolidColor;cam.fieldOfView=48;cam.nearClipPlane=.08f;cam.farClipPlane=95;
+            cam.backgroundColor=RenderSettings.fogColor;cam.clearFlags=RenderSettings.skybox?CameraClearFlags.Skybox:CameraClearFlags.SolidColor;cam.fieldOfView=48;cam.nearClipPlane=.08f;cam.farClipPlane=95;
             var data=cam.GetUniversalAdditionalCameraData();data.renderPostProcessing=true;
             view=cam.gameObject.AddComponent<SumiCamera>();view.player=player;cam.transform.position=new Vector3(0,4,-11);
             // SumiCamera owns the gameplay transform. A second live camera driver caused feedback
             // and occasional close-up snaps when the hand-authored framing moved.
             view.virtualCamera=null;
+            combatTrack=Resources.Load<AudioClip>("Sumi/Audio/Samurai");
+            titleTrack=Resources.Load<AudioClip>("Sumi/Audio/TheDragonTakesShape");
+            music=gameObject.AddComponent<AudioSource>();music.loop=true;music.playOnAwake=false;music.spatialBlend=0;music.volume=.22f;
+            musicFilter=gameObject.AddComponent<AudioLowPassFilter>();musicFilter.cutoffFrequency=22000;
             run=gameObject.AddComponent<SumiRunDirector>();run.Init(player);
-            var track=Resources.Load<AudioClip>("Sumi/Audio/Samurai");
-            if(track){music=gameObject.AddComponent<AudioSource>();music.clip=track;music.loop=true;music.playOnAwake=false;music.spatialBlend=0;music.volume=.22f;music.Play();}
-            Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+            // Title / menus unlock the cursor; Intro and combat lock it again.
+        }
+        public void SetTitleMusic(bool title)
+        {
+            if(!music)return;
+            AudioClip want=title&&titleTrack?titleTrack:combatTrack;
+            if(!want)return;
+            if(onTitleMusic==title&&music.clip==want&&music.isPlaying)return;
+            onTitleMusic=title;music.clip=want;music.volume=.22f;music.Play();musicPaused=false;
+            if(musicFilter)musicFilter.cutoffFrequency=22000;
         }
         // Acquisition stays tighter than the range a held lock survives, so a foe drifting around
         // the edge cannot make the lock flicker on and off.
@@ -30,9 +41,16 @@ namespace Sumi
         void Update()
         {
             SumiCombatFeedback.Tick();
+            SumiDeathFx.Tick();
             if(music&&run.Paused!=musicPaused){musicPaused=run.Paused;if(musicPaused)music.Pause();else music.UnPause();}
+            if(music&&!musicPaused)
+            {
+                float want=run&&run.state==SumiRunState.Death?.22f*SumiDeath.MusicGain:.22f;
+                music.volume=Mathf.MoveTowards(music.volume,want,Time.unscaledDeltaTime*1.8f);
+                if(musicFilter)musicFilter.cutoffFrequency=Mathf.MoveTowards(musicFilter.cutoffFrequency,run&&run.state==SumiRunState.Death?SumiDeath.MusicCutoff:22000,Time.unscaledDeltaTime*14000);
+            }
             var keyboard=UnityEngine.InputSystem.Keyboard.current;
-            if(keyboard?.qKey.wasPressedThisFrame==true){if(player.locked)ReleaseLock();else SelectTarget(0);}
+            if(keyboard?.tabKey.wasPressedThisFrame==true){if(player.locked)ReleaseLock();else SelectTarget(0);}
             var mouse=UnityEngine.InputSystem.Mouse.current;
             if(player.locked&&mouse!=null){float wheel=mouse.scroll.ReadValue().y;if(Mathf.Abs(wheel)>.01f)SelectTarget(wheel>0?1:-1);}
             if(player.locked)MaintainLock();

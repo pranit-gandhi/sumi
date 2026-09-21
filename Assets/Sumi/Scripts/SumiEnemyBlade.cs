@@ -44,7 +44,7 @@ namespace Sumi
             weight=Mathf.MoveTowards(weight,enemy.dead?0:enemy.PoseWeight,Time.deltaTime*16);
             animator.SetIKPositionWeight(AvatarIKGoal.RightHand,weight);animator.SetIKRotationWeight(AvatarIKGoal.RightHand,weight);
             animator.SetIKPositionWeight(AvatarIKGoal.LeftHand,weight*.9f);animator.SetIKRotationWeight(AvatarIKGoal.LeftHand,weight*.8f);
-            if(weight<=0||enemy.CurrentAttack==null)return;
+            if(weight<=0||(enemy.CurrentAttack==null&&!enemy.Deflected))return;
             enemy.GetSwordPose(out var grip,out var line);
             grip=ClampHand(grip,rightShoulder,rightReach);
             animator.SetIKPosition(AvatarIKGoal.RightHand,grip);animator.SetIKRotation(AvatarIKGoal.RightHand,Quaternion.FromToRotation(Vector3.up,line));
@@ -52,17 +52,28 @@ namespace Sumi
             animator.SetIKRotation(AvatarIKGoal.LeftHand,Quaternion.FromToRotation(Vector3.up,line));
         }
 
+        public void Release(Vector3 impulse)
+        {
+            enabled=false;if(trail){trail.emitting=false;trail.Clear();}
+            if(!sword)return;
+            SumiDeathFx.DropWeapon(sword,impulse);
+            sword=null;
+        }
+
         void LateUpdate()
         {
             if(!enemy||!sword||!tip)return;
+            if(enemy.dead){if(trail)trail.emitting=false;return;}
             sword.localPosition=home;sword.localRotation=rotation;sword.localScale=scale;
-            bool posed=!enemy.dead&&enemy.CurrentAttack!=null&&weight>0;
+            bool posed=!enemy.dead&&(enemy.CurrentAttack!=null||enemy.Deflected)&&weight>0;
             if(posed)
             {
                 enemy.GetSwordPose(out var grip,out var line);grip=ClampHand(grip,rightShoulder,rightReach);
                 Vector3 position=sword.position;Quaternion animated=sword.rotation;
                 sword.rotation=Quaternion.FromToRotation(Vector3.up,line);
-                Vector3 goal=grip+line*.08f-sword.TransformVector(new Vector3(bladeCenter.x,bladeBottom,bladeCenter.z));
+                // Katana is authored directly on the hand bone; matching the resolved IK root
+                // prevents the wrapped grip from hovering beyond the palm.
+                Vector3 goal=grip;
                 sword.position=Vector3.Lerp(position,goal,weight);sword.rotation=Quaternion.Slerp(animated,sword.rotation,weight);
                 tip.position=grip+line*(enemy.kind==SumiEnemyKind.Oni?1.45f:1.13f);
             }

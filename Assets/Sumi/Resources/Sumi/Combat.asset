@@ -18,8 +18,8 @@ MonoBehaviour:
   dodgeDuration: 0.34
   dodgeCooldown: 0.72
   parryStartup: 0.025
-  perfectWindow: 0.16
-  parryWindow: 0.34
+  perfectWindow: 0.24
+  parryWindow: 0.48
   parryRecovery: 0.55
   lightDamage: 18
   finishingDamage: 27

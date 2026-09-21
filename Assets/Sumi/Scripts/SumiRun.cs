@@ -5,31 +5,54 @@ using UnityEngine.SceneManagement;
 
 namespace Sumi
 {
-    public enum SumiRunState { Intro,Wave,Upgrade,BossIntro,Boss,Victory,Death,Paused }
+    public enum SumiRunState { Title,Intro,Wave,Upgrade,BossIntro,Boss,Victory,Death,Paused }
     public enum SumiEnemyKind { Retainer,Shade,Oni }
 
-    // One owner for hit stop and menus prevents a late effect from unpausing the game.
+    // One owner for hit stop, death slow-motion and menus prevents a late effect from unpausing the game.
     public static class SumiTime
     {
-        static float hitUntil;static bool menu;
+        static float hitUntil,slowStart,slowUntil,slowHold,slowFade,slowScale=1;static bool menu;
         public static bool MenuPaused=>menu;
         public static void HitStop(float seconds){hitUntil=Mathf.Max(hitUntil,Time.unscaledTime+seconds);Tick();}
+        public static void SlowMotion(float scale,float hold,float fade)
+        {
+            slowScale=Mathf.Clamp(scale,.05f,1f);slowHold=Mathf.Max(0,hold);slowFade=Mathf.Max(.01f,fade);
+            slowStart=Mathf.Max(Time.unscaledTime,hitUntil);slowUntil=slowStart+slowHold+slowFade;Tick();
+        }
         public static void Menu(bool value){menu=value;Tick();}
-        public static void Tick(){Time.timeScale=menu||Time.unscaledTime<hitUntil?0:1;}
-        public static void Reset(){hitUntil=0;menu=false;Time.timeScale=1;}
+        public static void Tick()
+        {
+            float now=Time.unscaledTime;
+            if(menu||now<hitUntil){Time.timeScale=0;return;}
+            if(now<slowUntil)
+            {
+                float t=now-slowStart;
+                Time.timeScale=t<=slowHold?slowScale:Mathf.Lerp(slowScale,1,Mathf.Clamp01((t-slowHold)/slowFade));
+                return;
+            }
+            Time.timeScale=1;
+        }
+        public static void Reset(){hitUntil=0;menu=false;slowUntil=0;slowStart=0;slowScale=1;Time.timeScale=1;}
     }
 
     public sealed class SumiRunDirector:MonoBehaviour
     {
-        public SumiRunState state=SumiRunState.Intro;public SumiPlayer player;
+        public SumiRunState state=SumiRunState.Title;public SumiPlayer player;
         public bool CombatActive=>state==SumiRunState.Wave||state==SumiRunState.Boss;
         public bool Paused=>state==SumiRunState.Paused;
         public float redPulse;public string banner="THE PAINTED COURT";
         readonly List<SumiEnemy> enemies=new List<SumiEnemy>();readonly List<int> offered=new List<int>();readonly HashSet<int> chosen=new HashSet<int>();
         readonly HashSet<string> shownHints=new HashSet<string>();
         float nextThreatAt,hintUntil;int lastAttackerId;string combatHint;
-        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNameLit,wheelNote,wave,pauseNote,menuItem,menuItemLit;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture,sealTexture,paperTexture,vignetteTexture,ensoTexture;
+        SumiRunState beforePause;SumiEnemy attacker;float stateAt,nextArrowAt,bannerUntil,nextColorUpdate,shownHealth=1,trailHealth=1,lastHealth=1,trailDelay,healthVelocity,trailVelocity;int spawned,waveIndex;GUIStyle title,small,hud,card,center,wheelName,wheelNameLit,wheelNote,wave,pauseNote,menuItem,menuItemLit,brand,controlsTitle,controlsBody,aboutBody,cues;Renderer[] playerRenderers;MaterialPropertyBlock colorBlock;Texture2D pipTexture,barTexture,sealTexture,paperTexture,vignetteTexture,ensoTexture;
+        bool controlsOpen,aboutOpen,combosOpen,combosRevealed,overlayFromTitle;static bool skipTitle;
+        float upgradeArmedAt;int upgradePress=-1;
         static readonly Vector3[] Gates={new Vector3(0,0,17.5f),new Vector3(17.5f,0,0),new Vector3(0,0,-17.5f),new Vector3(-17.5f,0,0)};
+        static readonly string ControlsBody="WASD move   •   LMB chain cuts   •   R heavy   •   Q / RMB parry\n\nSPACE Dash   •   TAB lock   •   E execute   •   F shuriken\n\nESC pause";
+        static readonly string AboutBody="Sumi is a ronin who fell in battle in his own world.\n\nDeath has given him one final chance.\n\nCaught between life and death, he must fight his way through the ink.\n\nCan he return?";
+        static readonly string CombosBody="LMB + LMB + LMB     three-cut chain\n\nLMB + R             heavy follow-up\n\nR                   heavy cut\n\nSPACE + LMB         dash into a cut\n\nSPACE + R           dash into heavy";
+        static readonly string CombosGate="A true ronin would spend time\nfiguring out the combos himself.\n\nContinue?";
+        static readonly string ActionCues="LMB  cuts\nR  heavy\nQ  parry\nF  shuriken\nSPACE  dash\nTAB  lock";
 
         // Each wave adds pressure using enemies the run has already taught, while the Oni remains
         // the only new read at the end. At most four waves can open upgrades because the pool has
@@ -37,42 +60,84 @@ namespace Sumi
         struct Wave { public int retainers,shades;public bool arrows,upgrade;public string banner; }
         static readonly Wave[] Waves=
         {
-            new Wave{retainers=2,shades=0,arrows=false,upgrade=false,banner="FIRST INK — THE RETAINERS"},
-            new Wave{retainers=3,shades=0,arrows=false,upgrade=true, banner="SECOND INK — THE GATHERING"},
-            new Wave{retainers=3,shades=1,arrows=true, upgrade=false,banner="THIRD INK — FOUR DIRECTIONS"},
-            new Wave{retainers=4,shades=1,arrows=true, upgrade=true, banner="FOURTH INK — THE CLOSING FAN"},
-            new Wave{retainers=4,shades=2,arrows=true, upgrade=false,banner="FIFTH INK — THE DEEP COURT"},
-            new Wave{retainers=5,shades=2,arrows=true, upgrade=true, banner="SIXTH INK — THE BLACK RING"},
-            new Wave{retainers=5,shades=3,arrows=true, upgrade=false,banner="SEVENTH INK — THE CROWDED GATE"},
-            new Wave{retainers=6,shades=3,arrows=true, upgrade=true, banner="EIGHTH INK — BEFORE THE BELL"},
+            new Wave{retainers=2,shades=0,arrows=false,upgrade=false,banner="ACT I"},
+            new Wave{retainers=3,shades=0,arrows=false,upgrade=true, banner="ACT II"},
+            new Wave{retainers=3,shades=1,arrows=true, upgrade=false,banner="ACT III"},
+            new Wave{retainers=4,shades=1,arrows=true, upgrade=true, banner="ACT IV"},
+            new Wave{retainers=4,shades=2,arrows=true, upgrade=false,banner="ACT V"},
+            new Wave{retainers=5,shades=2,arrows=true, upgrade=true, banner="ACT VI"},
+            new Wave{retainers=5,shades=3,arrows=true, upgrade=false,banner="ACT VII"},
+            new Wave{retainers=6,shades=3,arrows=true, upgrade=true, banner="ACT VIII"},
         };
-        static readonly string[] UpgradeNames={"RED THREAD","SECOND BREATH","STEADY HEART","SPLIT INK","DEEP INK","QUICK INK"};
-        static readonly string[] UpgradeText={"+25 max health","Executions heal 10","Take 20% less damage","Throw two darts","Darts hit harder","Throw more often"};
+        static readonly string[] UpgradeNames={"RED THREAD","SECOND BREATH","STEADY HEART","TWIN STARS","DEEP CUT","QUICK DRAW"};
+        static readonly string[] UpgradeText={"+25 max health","Executions heal 10","Take 20% less damage","Throw two shuriken","Shuriken hit harder","Throw more often"};
         // Letterspaced by hand: IMGUI has no tracking, and emptiness does the rest.
         const string PauseLine="T H E   C O U R T   H O L D S   I T S   B R E A T H";
         const string ChoosePrompt="C H O O S E   O N E   S T R O K E";
+        const string DeathLine="T H E   I N K   T A K E S   Y O U";
+        const string ControlsLine="C O N T R O L S";
+        const string AboutLine="A B O U T";
+        const string CombosLine="C O M B O S";
 
-        public void Init(SumiPlayer p){player=p;stateAt=Time.unscaledTime;bannerUntil=stateAt+2.8f;SumiTime.Reset();playerRenderers=p.GetComponentsInChildren<Renderer>(true);colorBlock=new MaterialPropertyBlock();}
+        public void Init(SumiPlayer p)
+        {
+            player=p;stateAt=Time.unscaledTime;playerRenderers=p.GetComponentsInChildren<Renderer>(true);colorBlock=new MaterialPropertyBlock();
+            controlsOpen=false;aboutOpen=false;combosOpen=false;overlayFromTitle=false;upgradePress=-1;
+            bool rise=skipTitle;skipTitle=false;
+            if(rise)EnterIntro();
+            else EnterTitle();
+        }
+        void EnterTitle()
+        {
+            state=SumiRunState.Title;stateAt=Time.unscaledTime;bannerUntil=0;SumiTime.Menu(true);
+            controlsOpen=false;aboutOpen=false;combosOpen=false;
+            if(player){player.controllable=false;SetPlayerVisible(false);}
+            if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.HoldTitle(true);
+            if(SumiGame.I)SumiGame.I.SetTitleMusic(true);
+            Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
+        }
+        void EnterIntro()
+        {
+            state=SumiRunState.Intro;stateAt=Time.unscaledTime;bannerUntil=stateAt+2.8f;banner="THE PAINTED COURT";
+            SumiTime.Reset();controlsOpen=false;aboutOpen=false;combosOpen=false;
+            if(player){player.controllable=true;SetPlayerVisible(true);}
+            if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.HoldTitle(false);
+            if(SumiGame.I)SumiGame.I.SetTitleMusic(false);
+            Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+        }
+        void BeginJourney()
+        {
+            controlsOpen=false;aboutOpen=false;combosOpen=false;EnterIntro();
+        }
+        void ReturnToTitle()
+        {
+            skipTitle=false;SumiTime.Reset();SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+        void SetPlayerVisible(bool visible)
+        {
+            if(playerRenderers==null&&player)playerRenderers=player.GetComponentsInChildren<Renderer>(true);
+            if(playerRenderers==null)return;
+            foreach(var r in playerRenderers)if(r)r.enabled=visible;
+        }
         void Update()
         {
             SumiTime.Tick();redPulse=Mathf.MoveTowards(redPulse,0,Time.unscaledDeltaTime*1.8f);
             if(player&&player.combat!=null){float target=Mathf.Clamp01(player.combat.health/player.combat.maxHealth);float dt=Time.unscaledDeltaTime;if(target<lastHealth-.001f)trailDelay=Time.unscaledTime+.27f;lastHealth=target;if(target<shownHealth)shownHealth=Mathf.SmoothDamp(shownHealth,target,ref healthVelocity,.17f,Mathf.Infinity,dt);else shownHealth=Mathf.MoveTowards(shownHealth,target,dt*.75f);if(trailHealth<target)trailHealth=Mathf.MoveTowards(trailHealth,target,dt*.75f);else if(Time.unscaledTime>trailDelay)trailHealth=Mathf.SmoothDamp(trailHealth,target,ref trailVelocity,.56f,Mathf.Infinity,dt);}
             if(Time.unscaledTime>=nextColorUpdate){nextColorUpdate=Time.unscaledTime+.05f;ApplyColor();}
             var k=Keyboard.current;
-            if((state==SumiRunState.Death||state==SumiRunState.Victory)&&k!=null&&k.rKey.wasPressedThisFrame){Restart();return;}
+            if(state==SumiRunState.Victory&&k!=null&&k.rKey.wasPressedThisFrame){Restart();return;}
+            if(state==SumiRunState.Death)
+            {
+                bool skip=k!=null&&(k.rKey.wasPressedThisFrame||k.spaceKey.wasPressedThisFrame||k.enterKey.wasPressedThisFrame);
+                var mouse=Mouse.current;if(mouse!=null&&mouse.leftButton.wasPressedThisFrame)skip=true;
+                if(skip)SumiDeath.Skip();
+            }
             if(state==SumiRunState.Intro&&Time.unscaledTime-stateAt>2.2f)BeginWave(1);
             if(state==SumiRunState.Wave||state==SumiRunState.Boss)
             {
                 enemies.RemoveAll(e=>!e);
                 if(player.combat.health<=0){EnterEnd(false);return;}
-                // Arrows take a turn in the threat budget. They cannot overlap a melee combo.
-                if(state==SumiRunState.Wave&&Time.time>=nextArrowAt&&!attacker&&Time.time>=nextThreatAt)
-                {
-                    SpawnArrow();
-                    var volley=player&&player.config?player.config.arrowVolley:null;
-                    nextThreatAt=Time.time+(volley!=null?volley.LastImpactAt+.12f:1.12f);
-                    nextArrowAt=Time.time+Random.Range(8.5f,11f);
-                }
+                if(Time.time>=nextArrowAt&&SpawnArrow())nextArrowAt=Time.time+ArrowDelay();
                 if(spawned>0&&AliveCount()==0)
                 {
                     if(state==SumiRunState.Wave)ClearWave();
@@ -84,6 +149,8 @@ namespace Sumi
 
         void BeginWave(int wave)
         {
+            if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.HoldTitle(false);
+            SetPlayerVisible(true);controlsOpen=false;aboutOpen=false;combosOpen=false;
             waveIndex=Mathf.Clamp(wave,1,Waves.Length);var plan=Waves[waveIndex-1];
             state=SumiRunState.Wave;spawned=0;attacker=null;nextThreatAt=Time.time+.4f;lastAttackerId=0;player.controllable=true;
             Banner(plan.banner,2.1f);
@@ -91,7 +158,7 @@ namespace Sumi
             int total=plan.shades+plan.retainers,slot=0;
             for(int i=0;i<plan.shades;i++)Spawn(SumiEnemyKind.Shade,slot++,total);
             for(int i=0;i<plan.retainers;i++)Spawn(SumiEnemyKind.Retainer,slot++,total);
-            nextArrowAt=plan.arrows?Time.time+5.2f:float.MaxValue;
+            nextArrowAt=Time.time+4f;
         }
         void ClearWave(){if(Waves[waveIndex-1].upgrade)OpenUpgrade();else Advance();}
         void Advance()
@@ -99,7 +166,7 @@ namespace Sumi
             if(waveIndex<Waves.Length){BeginWave(waveIndex+1);return;}
             state=SumiRunState.BossIntro;stateAt=Time.unscaledTime;player.controllable=false;Banner("A BELL BENEATH THE PAPER",1.8f);
         }
-        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;nextThreatAt=Time.time+.65f;player.controllable=true;Spawn(SumiEnemyKind.Oni,0,1);nextArrowAt=Time.time+8;Banner("THE PAINTED ONI",2.3f);}
+        void BeginBoss(){state=SumiRunState.Boss;spawned=0;attacker=null;nextThreatAt=Time.time+.65f;player.controllable=true;Spawn(SumiEnemyKind.Oni,0,1);nextArrowAt=Time.time+3.5f;Banner("THE PAINTED ONI",2.3f);}
         void Spawn(SumiEnemyKind kind,int slot,int total)
         {
             var go=new GameObject(kind==SumiEnemyKind.Oni?"Painted Oni":kind==SumiEnemyKind.Shade?"Ink Shade":"Ashen Retainer");go.transform.position=SpawnPoint(slot,total);
@@ -150,7 +217,18 @@ namespace Sumi
         }
         public int OrbitIndex(SumiEnemy e){int i=enemies.IndexOf(e);return i<0?0:i;}
         public void EnemyDied(SumiEnemy enemy){ReleaseAttack(enemy);}
-        void SpawnArrow(){if(!CombatActive||!player.controllable)return;new GameObject("Announced ink arrow").AddComponent<SumiArrowStrike>().Init(player,this);}
+        bool SpawnArrow()
+        {
+            if(!CombatActive||!player.controllable)return false;
+            if(FindFirstObjectByType<SumiArrowStrike>())return false;
+            new GameObject("Announced ink arrow").AddComponent<SumiArrowStrike>().Init(player,this);
+            return true;
+        }
+        float ArrowDelay()
+        {
+            var volley=player&&player.config?player.config.arrowVolley:null;
+            return volley!=null?volley.NextDelay(state==SumiRunState.Boss):state==SumiRunState.Boss?8.5f:10f;
+        }
 
         void OpenUpgrade()
         {
@@ -158,6 +236,7 @@ namespace Sumi
             // Nothing left to offer is not a menu; continue rather than showing an empty wheel.
             if(offered.Count==0){Advance();return;}
             state=SumiRunState.Upgrade;player.controllable=false;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
+            upgradeArmedAt=Time.unscaledTime+.45f;upgradePress=-1;
             Banner("CHOOSE A SPELL",99);
             player.combat.health=Mathf.Min(player.combat.maxHealth,player.combat.health+12);
         }
@@ -168,9 +247,10 @@ namespace Sumi
         }
         void EnterEnd(bool victory)
         {
-            state=victory?SumiRunState.Victory:SumiRunState.Death;stateAt=Time.unscaledTime;player.controllable=false;attacker=null;SumiTime.Reset();
-            foreach(var e in enemies)if(e)e.enabled=false;Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
-            Banner(victory?"THE NIGHT REMEMBERS":"THE INK TAKES YOU",99);if(!victory)redPulse=1;
+            state=victory?SumiRunState.Victory:SumiRunState.Death;stateAt=Time.unscaledTime;player.controllable=false;attacker=null;
+            foreach(var e in enemies)if(e)e.enabled=false;
+            if(victory){SumiTime.Reset();Cursor.lockState=CursorLockMode.None;Cursor.visible=true;Banner("THE NIGHT REMEMBERS",99);}
+            else redPulse=1;
         }
         public void PlayerDamaged(){redPulse=1;if(player.combat.health<=0)EnterEnd(false);}
         void ApplyColor()
@@ -192,70 +272,103 @@ namespace Sumi
         }
         public void TogglePause()
         {
-            if(state==SumiRunState.Death||state==SumiRunState.Victory)return;
+            if(controlsOpen||aboutOpen||combosOpen){CloseOverlay();return;}
+            if(state==SumiRunState.Death||state==SumiRunState.Victory||state==SumiRunState.Title)return;
             if(state==SumiRunState.Paused){state=beforePause;bool choosing=state==SumiRunState.Upgrade;SumiTime.Menu(choosing);Cursor.lockState=choosing?CursorLockMode.None:CursorLockMode.Locked;Cursor.visible=choosing;}
             else {beforePause=state;state=SumiRunState.Paused;SumiTime.Menu(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
         }
-        void Restart(){SumiTime.Reset();SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);}
+        void OpenControls(bool fromTitle){aboutOpen=false;combosOpen=false;controlsOpen=true;overlayFromTitle=fromTitle;Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
+        void OpenAbout(){controlsOpen=false;combosOpen=false;aboutOpen=true;overlayFromTitle=true;Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
+        void OpenCombos(bool fromTitle){controlsOpen=false;aboutOpen=false;combosOpen=true;combosRevealed=false;overlayFromTitle=fromTitle;Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
+        void CloseOverlay()
+        {
+            controlsOpen=false;aboutOpen=false;combosOpen=false;combosRevealed=false;
+            if(overlayFromTitle||state==SumiRunState.Title){Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
+            else if(state==SumiRunState.Paused){Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
+        }
+        void Restart(){skipTitle=true;SumiTime.Reset();SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);}
         public void DebugChoose(int slot){Choose(slot);}
         public void DebugRestart(){Restart();}
+        public void DebugBeginJourney(){BeginJourney();}
         void Banner(string text,float duration){banner=text;bannerUntil=Time.unscaledTime+duration;}
 
         void Styles()
         {
             // Hot reload can keep styles alive while wiping Texture2D fields. Rebuild when any art is gone.
             bool artReady=paperTexture&&sealTexture&&vignetteTexture&&ensoTexture;
-            if(title!=null&&wave!=null&&menuItem!=null&&artReady)return;
+            if(title!=null&&wave!=null&&menuItem!=null&&brand!=null&&controlsTitle!=null&&controlsBody!=null&&aboutBody!=null&&cues!=null&&artReady)return;
             Font font=Resources.Load<Font>("Fonts/JiayouAkira-MAVEY");
-            title=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.052f)};title.normal.textColor=new Color(.07f,.055f,.05f);
+            Color cream=new Color(.96f,.92f,.82f);
+            title=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.052f)};title.normal.textColor=cream;
             small=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.020f)};
-            hud=new GUIStyle(small);hud.normal.textColor=new Color(.08f,.07f,.065f);
-            card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.025f)};card.normal.textColor=new Color(.07f,.05f,.04f);
+            hud=new GUIStyle(small);hud.normal.textColor=cream;
+            card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,font=font,fontSize=Mathf.RoundToInt(Screen.height*.025f)};card.normal.textColor=cream;
             center=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.028f)};
-            // Ofuda text: dark ink on paper.
-            wheelName=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.034f),wordWrap=true,alignment=TextAnchor.UpperCenter};wheelName.normal.textColor=new Color(.055f,.045f,.040f);
-            wheelNameLit=new GUIStyle(wheelName);wheelNameLit.normal.textColor=new Color(.42f,.040f,.055f);
-            wheelNote=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.016f),wordWrap=true,alignment=TextAnchor.UpperCenter};wheelNote.normal.textColor=new Color(.28f,.24f,.21f);
-            wave=new GUIStyle(title){alignment=TextAnchor.UpperLeft,fontSize=Mathf.RoundToInt(Screen.height*.040f)};wave.normal.textColor=new Color(.055f,.047f,.043f);
+            // Ofuda text: dark ink on paper. Paint every style state so hover never flashes white.
+            Color inkDark=new Color(.055f,.045f,.040f),inkRed=new Color(.42f,.040f,.055f),inkNote=new Color(.22f,.18f,.15f);
+            wheelName=new GUIStyle(title){fontSize=Mathf.RoundToInt(Screen.height*.034f),wordWrap=true,alignment=TextAnchor.UpperCenter};PaintStyle(wheelName,inkDark);
+            wheelNameLit=new GUIStyle(wheelName);PaintStyle(wheelNameLit,inkRed);
+            wheelNote=new GUIStyle(small){fontSize=Mathf.RoundToInt(Screen.height*.024f),wordWrap=true,alignment=TextAnchor.UpperCenter};PaintStyle(wheelNote,inkNote);
+            wave=new GUIStyle(title){alignment=TextAnchor.UpperLeft,fontSize=Mathf.RoundToInt(Screen.height*.040f)};wave.normal.textColor=cream;
             // Pause sits on a dark wash, so the line and choices read as pale ink.
             pauseNote=new GUIStyle(small){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.022f)};pauseNote.normal.textColor=new Color(.86f,.82f,.72f);
             menuItem=new GUIStyle(title){alignment=TextAnchor.MiddleCenter,fontSize=Mathf.RoundToInt(Screen.height*.038f)};menuItem.normal.textColor=new Color(.62f,.58f,.50f);
-            menuItemLit=new GUIStyle(menuItem);menuItemLit.normal.textColor=new Color(.96f,.92f,.82f);
+            menuItemLit=new GUIStyle(menuItem);menuItemLit.normal.textColor=cream;
+            brand=new GUIStyle(menuItemLit){fontSize=Mathf.RoundToInt(Screen.height*.11f)};
+            controlsTitle=new GUIStyle(menuItemLit){fontSize=Mathf.RoundToInt(Screen.height*.048f)};
+            controlsBody=new GUIStyle(pauseNote){fontSize=Mathf.RoundToInt(Screen.height*.028f),wordWrap=true,alignment=TextAnchor.MiddleCenter};controlsBody.normal.textColor=cream;
+            aboutBody=new GUIStyle(controlsBody){fontSize=Mathf.RoundToInt(Screen.height*.034f)};
+            cues=new GUIStyle(hud){alignment=TextAnchor.LowerRight,fontSize=Mathf.RoundToInt(Screen.height*.018f)};
             BuildHudTextures();
         }
         void OnGUI()
         {
             Styles();float w=Screen.width,h=Screen.height;Color old=GUI.color;
+            if(state==SumiRunState.Title)
+            {
+                if(controlsOpen)DrawControls(w,h);
+                else if(combosOpen)DrawCombos(w,h);
+                else if(aboutOpen)DrawAbout(w,h);
+                else DrawTitleMenu(w,h);
+                return;
+            }
             float low=player&&player.combat!=null?Mathf.Clamp01((45-player.combat.health)/45f):0;
-            if(low>0||redPulse>0){GUI.color=new Color(.48f,.015f,.02f,Mathf.Max(low*.30f,redPulse*.42f));GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);}
+            if(state!=SumiRunState.Death&&state!=SumiRunState.Victory&&(low>0||redPulse>0)){GUI.color=new Color(.48f,.015f,.02f,Mathf.Max(low*.30f,redPulse*.42f));GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);}
             GUI.color=old;
-            bool menuOpen=state==SumiRunState.Paused||state==SumiRunState.Upgrade;
+            bool menuOpen=state==SumiRunState.Paused||state==SumiRunState.Upgrade||state==SumiRunState.Death||state==SumiRunState.Victory;
             if(player&&player.combat!=null&&!menuOpen)
             {
-                DrawCombo(w,h);DrawHealth(w,h);
+                DrawCombo(w,h);DrawHealth(w,h);DrawActionCues(w,h);
                 if(player.combat.ExecutionTarget)GUI.Label(new Rect(w*.37f,h*.69f,w*.26f,42),"E  —  DECISIVE CUT",center);
             }
-            if(!menuOpen&&state!=SumiRunState.Intro&&state!=SumiRunState.Death&&state!=SumiRunState.Victory)DrawWaveCounter(w,h);
-            if(!menuOpen&&state!=SumiRunState.Upgrade&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
+            if(!menuOpen&&state!=SumiRunState.Intro)DrawWaveCounter(w,h);
+            if(!menuOpen&&player&&player.locked&&player.target){var lockedEnemy=player.target.GetComponent<SumiEnemy>();if(lockedEnemy&&!lockedEnemy.dead)DrawEnemyHealth(w,h,lockedEnemy);}
             if(Time.unscaledTime<bannerUntil&&!menuOpen)GUI.Label(new Rect(w*.15f,h*.13f,w*.70f,h*.10f),banner,title);
-            if(state==SumiRunState.Intro)GUI.Label(new Rect(w*.2f,h*.89f,w*.6f,25),"F  THROW INK",small);
-            if(state==SumiRunState.Intro){GUI.Label(new Rect(w*.2f,h*.73f,w*.6f,h*.16f),"WASD move   •   LMB chain cuts   •   R heavy   •   RMB guard / deflect\nSPACE Brush Flash   •   Q lock   •   E execute",small);}
+            if(state==SumiRunState.Intro)GUI.Label(new Rect(w*.12f,h*.68f,w*.76f,h*.26f),ControlsBody,controlsBody??small??GUI.skin.label);
             if(CombatActive&&Time.time<hintUntil)GUI.Label(new Rect(w*.15f,h*.79f,w*.70f,35),combatHint,small);
             if(CombatActive&&attacker&&attacker.Attacking&&attacker.CurrentAttack!=null)
                 GUI.Label(new Rect(w*.25f,h*.735f,w*.5f,30),attacker.CurrentAttack.unblockable?"CRIMSON SWEEP  —  EVADE":attacker.Braced?"BRACED  —  HEAVY / DEFLECT":attacker.CurrentAttack.name,small);
             if(state==SumiRunState.Upgrade)DrawSpellWheel(w,h);
-            if(state==SumiRunState.Death||state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),state==SumiRunState.Victory?"THE COURT IS QUIET":"YOUR GOLD RETURNS TO PAPER",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  PAINT AGAIN",card))Restart();}
-            if(state==SumiRunState.Paused)DrawPauseMenu(w,h);
+            if(state==SumiRunState.Death)DrawDeathMenu(w,h);
+            else if(state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),"THE COURT IS QUIET",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  RISE AGAIN",card))Restart();}
+            if(controlsOpen)DrawControls(w,h);
+            else if(combosOpen)DrawCombos(w,h);
+            else if(aboutOpen)DrawAbout(w,h);
+            else if(state==SumiRunState.Paused)DrawPauseMenu(w,h);
         }
         void DrawWaveCounter(float w,float h)
         {
             int current=Mathf.Clamp(waveIndex,1,Waves.Length);
             GUIStyle counter=wave??hud??GUI.skin.label;
             Color old=GUI.color;Rect r=new Rect(w*.035f,h*.046f,180,60);
-            GUI.color=new Color(.92f,.89f,.80f,.22f);GUI.DrawTexture(new Rect(r.x-8,r.y+6,96,4),Texture2D.whiteTexture);
             GUI.color=new Color(.012f,.011f,.010f,.18f);GUI.Label(new Rect(r.x+2,r.y+2,r.width,r.height),current+"/"+Waves.Length,counter);
             GUI.color=old;GUI.Label(r,current+"/"+Waves.Length,counter);
             GUI.color=old;
+        }
+        void DrawActionCues(float w,float h)
+        {
+            float cueW=Mathf.Clamp(w*.20f,170,260),cueH=Mathf.Clamp(h*.22f,130,190);
+            GUI.Label(new Rect(w-cueW-w*.03f,h-cueH-h*.045f,cueW,cueH),ActionCues,cues??hud??small??GUI.skin.label);
         }
         // No panel. No rods. Night wash, one quiet line, two ink choices. Ma does the rest.
         void DrawPauseMenu(float w,float h)
@@ -263,16 +376,126 @@ namespace Sumi
             Color old=GUI.color;
             GUI.color=new Color(.010f,.010f,.012f,.58f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
             Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.72f));
-            float lineY=h*.22f;
+            float lineY=h*.18f;
             GUI.color=old;
             GUI.Label(new Rect(w*.08f,lineY,w*.84f,42),PauseLine,pauseNote??small??GUI.skin.label);
             InkRule(w*.32f,lineY+46,w*.36f,2.2f,new Color(.86f,.82f,.72f,.38f));
-            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f,iy=h*.48f;
+            float iw=Mathf.Clamp(w*.42f,320,560),ih=Mathf.Max(40,h*.052f),ix=(w-iw)*.5f,iy=h*.30f,gap=ih*1.12f;
             if(PauseChoice(new Rect(ix,iy,iw,ih),"RESUME"))TogglePause();
-            if(PauseChoice(new Rect(ix,iy+ih*1.45f,iw,ih),"RESTART RUN"))Restart();
+            if(PauseChoice(new Rect(ix,iy+gap,iw,ih),"RISE AGAIN"))Restart();
+            if(PauseChoice(new Rect(ix,iy+gap*2f,iw,ih),"CONTROLS"))OpenControls(false);
+            if(PauseChoice(new Rect(ix,iy+gap*3f,iw,ih),"COMBOS"))OpenCombos(false);
+            if(PauseChoice(new Rect(ix,iy+gap*4f,iw,ih),"MAIN MENU"))ReturnToTitle();
             float sig=Mathf.Max(22,h*.032f);
             Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.88f,sig,sig),new Color(.72f,.055f,.075f,.78f));
             GUI.color=old;
+        }
+        void DrawDeathMenu(float w,float h)
+        {
+            float reveal=SumiDeath.UiReveal;if(reveal<.02f)return;
+            float a=Mathf.SmoothStep(0,1,Mathf.Clamp01((reveal-.06f)/.28f));
+            Color old=GUI.color;
+            GUI.color=new Color(.010f,.010f,.012f,.60f*a);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.78f*a));
+            GUI.color=old;
+            float lineY=h*.26f;
+            GUI.color=new Color(1,1,1,a);
+            GUI.Label(new Rect(w*.06f,lineY,w*.88f,56),DeathLine,menuItemLit??menuItem??pauseNote??GUI.skin.label);
+            InkRule(w*.28f,lineY+72,w*.44f,2.4f,new Color(.86f,.82f,.72f,.42f*a));
+            InkRule(w*.36f,lineY+78,w*.28f,1.4f,new Color(.70f,.050f,.070f,.55f*a));
+            float iw=Mathf.Clamp(w*.42f,320,560),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f,iy=h*.44f,gap=ih*1.28f;
+            if(PauseChoice(new Rect(ix,iy,iw,ih),"RISE AGAIN"))SumiDeath.Skip();
+            if(PauseChoice(new Rect(ix,iy+gap,iw,ih),"MAIN MENU"))ReturnToTitle();
+            float sig=Mathf.Max(24,h*.036f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.86f,sig,sig),new Color(.72f,.055f,.075f,.90f*a));
+            GUI.color=old;
+        }
+        void DrawTitleMenu(float w,float h)
+        {
+            Color old=GUI.color;
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.42f));
+            GUI.color=old;
+            float brandY=h*.10f;
+            GUI.Label(new Rect(w*.1f,brandY,w*.8f,Mathf.RoundToInt(h*.14f)),Identity.Title,brand??menuItemLit??GUI.skin.label);
+            InkRule(w*.38f,brandY+h*.13f,w*.24f,2.2f,new Color(.86f,.82f,.72f,.38f));
+            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(44,h*.058f),ix=(w-iw)*.5f,iy=h*.44f,gap=ih*1.18f;
+            if(TitleChoice(new Rect(ix,iy,iw,ih),"BEGIN JOURNEY"))BeginJourney();
+            if(TitleChoice(new Rect(ix,iy+gap,iw,ih),"CONTROLS"))OpenControls(true);
+            if(TitleChoice(new Rect(ix,iy+gap*2f,iw,ih),"COMBOS"))OpenCombos(true);
+            if(TitleChoice(new Rect(ix,iy+gap*3f,iw,ih),"ABOUT"))OpenAbout();
+            float sig=Mathf.Max(22,h*.032f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.88f,sig,sig),new Color(.72f,.055f,.075f,.78f));
+            GUI.color=old;
+        }
+        void DrawControls(float w,float h)
+        {
+            Color old=GUI.color;
+            GUI.color=new Color(.010f,.010f,.012f,.62f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.72f));
+            float lineY=h*.16f;
+            GUI.color=old;
+            GUI.Label(new Rect(w*.08f,lineY,w*.84f,56),ControlsLine,controlsTitle??menuItemLit??GUI.skin.label);
+            InkRule(w*.36f,lineY+70,w*.28f,2.2f,new Color(.86f,.82f,.72f,.38f));
+            GUI.Label(new Rect(w*.08f,h*.34f,w*.84f,h*.28f),ControlsBody,controlsBody??pauseNote??GUI.skin.label);
+            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f,iy=h*.72f;
+            if(PauseChoice(new Rect(ix,iy,iw,ih),"BACK"))CloseOverlay();
+            float sig=Mathf.Max(22,h*.032f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.88f,sig,sig),new Color(.72f,.055f,.075f,.78f));
+            GUI.color=old;
+        }
+        void DrawAbout(float w,float h)
+        {
+            Color old=GUI.color;
+            GUI.color=new Color(.010f,.010f,.012f,.62f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.72f));
+            float lineY=h*.14f;
+            GUI.color=old;
+            GUI.Label(new Rect(w*.08f,lineY,w*.84f,56),AboutLine,controlsTitle??menuItemLit??GUI.skin.label);
+            InkRule(w*.38f,lineY+70,w*.24f,2.2f,new Color(.86f,.82f,.72f,.38f));
+            GUI.Label(new Rect(w*.10f,h*.30f,w*.80f,h*.36f),AboutBody,aboutBody??controlsBody??pauseNote??GUI.skin.label);
+            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f,iy=h*.72f;
+            if(PauseChoice(new Rect(ix,iy,iw,ih),"BACK"))CloseOverlay();
+            float sig=Mathf.Max(22,h*.032f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.88f,sig,sig),new Color(.72f,.055f,.075f,.78f));
+            GUI.color=old;
+        }
+        void DrawCombos(float w,float h)
+        {
+            Color old=GUI.color;
+            GUI.color=new Color(.010f,.010f,.012f,.62f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.72f));
+            float lineY=h*.12f;
+            GUI.color=old;
+            GUI.Label(new Rect(w*.08f,lineY,w*.84f,56),CombosLine,controlsTitle??menuItemLit??GUI.skin.label);
+            InkRule(w*.38f,lineY+70,w*.24f,2.2f,new Color(.86f,.82f,.72f,.38f));
+            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f;
+            if(!combosRevealed)
+            {
+                GUI.Label(new Rect(w*.12f,h*.32f,w*.76f,h*.28f),CombosGate,aboutBody??controlsBody??pauseNote??GUI.skin.label);
+                if(PauseChoice(new Rect(ix,h*.66f,iw,ih),"CONTINUE"))combosRevealed=true;
+                if(PauseChoice(new Rect(ix,h*.66f+ih*1.25f,iw,ih),"BACK"))CloseOverlay();
+            }
+            else
+            {
+                GUI.Label(new Rect(w*.12f,h*.28f,w*.76f,h*.40f),CombosBody,aboutBody??controlsBody??pauseNote??GUI.skin.label);
+                if(PauseChoice(new Rect(ix,h*.74f,iw,ih),"BACK"))CloseOverlay();
+            }
+            float sig=Mathf.Max(22,h*.032f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.90f,sig,sig),new Color(.72f,.055f,.075f,.78f));
+            GUI.color=old;
+        }
+        bool TitleChoice(Rect r,string label)
+        {
+            Color old=GUI.color;bool hover=r.Contains(Event.current.mousePosition);
+            if(hover)
+            {
+                float seal=Mathf.Max(16,r.height*.42f);
+                Tex(sealTexture,new Rect(r.x-seal*1.35f,r.y+(r.height-seal)*.5f,seal,seal),new Color(.74f,.055f,.078f,.95f));
+            }
+            GUI.color=old;
+            GUI.Label(r,label,menuItemLit??menuItem??title??GUI.skin.label);
+            InkRule(r.x+r.width*(hover?.05f:.28f),r.y+r.height*.82f,r.width*(hover?.90f:.44f),hover?2.8f:1.5f,new Color(.86f,.82f,.72f,hover?.72f:.28f));
+            return GUI.Button(r,GUIContent.none,GUIStyle.none);
         }
         bool PauseChoice(Rect r,string label)
         {
@@ -360,14 +583,19 @@ namespace Sumi
             int filled=Mathf.Min(3,offered.Count);
             float slipW=Mathf.Clamp(w*.17f,150,230),slipH=Mathf.Clamp(h*.52f,320,520),gap=Mathf.Clamp(w*.035f,24,48);
             float total=filled*slipW+(filled-1)*gap,x0=(w-total)*.5f,y0=h*.22f;
+            bool armed=Time.unscaledTime>=upgradeArmedAt;
             int hover=-1;
             for(int i=0;i<filled;i++)
             {
                 Rect slip=new Rect(x0+i*(slipW+gap),y0,slipW,slipH);
-                if(slip.Contains(Event.current.mousePosition))hover=i;
+                bool over=slip.Contains(Event.current.mousePosition);
+                if(over)hover=i;
                 DrawOfuda(slip,UpgradeNames[offered[i]],UpgradeText[offered[i]],i==hover);
-                if(Event.current.type==EventType.MouseDown&&Event.current.button==0&&i==hover){Choose(i);Event.current.Use();}
+                if(!armed)continue;
+                if(Event.current.type==EventType.MouseDown&&Event.current.button==0&&over){upgradePress=i;Event.current.Use();}
+                if(Event.current.type==EventType.MouseUp&&Event.current.button==0&&over&&upgradePress==i){Choose(i);upgradePress=-1;Event.current.Use();}
             }
+            if(Event.current.type==EventType.MouseUp&&Event.current.button==0)upgradePress=-1;
             GUI.color=old;
         }
         void DrawOfuda(Rect slip,string name,string note,bool lit)
@@ -387,6 +615,12 @@ namespace Sumi
                 Tex(sealTexture,new Rect(slip.xMax-seal-14,slip.yMax-seal-18,seal,seal),new Color(.72f,.055f,.075f,.92f));
             }
             GUI.color=old;
+        }
+        static void PaintStyle(GUIStyle style,Color color)
+        {
+            if(style==null)return;
+            style.normal.textColor=color;style.hover.textColor=color;style.active.textColor=color;style.focused.textColor=color;
+            style.onNormal.textColor=color;style.onHover.textColor=color;style.onActive.textColor=color;style.onFocused.textColor=color;
         }
         void BuildHudTextures()
         {

@@ -1,12 +1,26 @@
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Animations;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using Sumi;
 
 // Reproducible CC0 clip copies and additive combat states; never rebuilds the humanoid prefab.
 public static class SumiCombatAuthoring
 {
+    [MenuItem("Sumi/Apply Evening Combat Palette")]
+    public static void ApplyEveningPalette()
+    {
+        RenderSettings.skybox=AssetDatabase.LoadAssetAtPath<Material>("Assets/Sumi/Resources/Sumi/Evening Gradient Sky.mat");RenderSettings.fog=true;RenderSettings.fogMode=FogMode.ExponentialSquared;RenderSettings.fogDensity=.0105f;
+        RenderSettings.fogColor=new Color(.91f,.89f,.84f);RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;RenderSettings.ambientLight=new Color(.78f,.73f,.67f);
+        var ground=AssetDatabase.LoadAssetAtPath<Material>("Assets/Sumi/Resources/Sumi/BarePaper.mat");if(ground){ground.SetColor("_BaseColor",new Color(.75f,.741f,.697f));EditorUtility.SetDirty(ground);}
+        var camera=Camera.main;if(camera){camera.backgroundColor=RenderSettings.fogColor;camera.clearFlags=CameraClearFlags.Skybox;EditorUtility.SetDirty(camera);}
+        foreach(var light in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))if(light.type==LightType.Directional)
+        {light.name="Soft evening light";light.color=new Color(.98f,.79f,.65f);light.intensity=1.08f;light.shadowStrength=.52f;light.transform.rotation=Quaternion.Euler(42,-35,0);RenderSettings.sun=light;EditorUtility.SetDirty(light);break;}
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());EditorSceneManager.SaveOpenScenes();AssetDatabase.SaveAssets();
+        Debug.Log("SUMI_EVENING_PALETTE_APPLIED");
+    }
+
     [MenuItem("Sumi/Author Combat Clips")]
     public static void Apply()
     {
@@ -33,7 +47,7 @@ public static class SumiCombatAuthoring
             if(move)return move;
             move=ScriptableObject.CreateInstance<SumiAttackDefinition>();move.name=name;move.animationState=state;move.arc=arc;move.duration=duration;move.activeWindow=active;move.linkWindow=link;move.damage=damage;move.lunge=lunge;move.finisher=finisher;
             move.guardCancel=active.y+.025f;move.dodgeCancel=active.y+.015f;move.hitDodgeCancel=active.x+.04f;
-            move.hitStop=finisher?.065f:.04f;move.cameraKick=finisher?.22f:.11f;
+            move.hitStop=finisher?.065f:.04f;move.cameraKick=finisher?.22f:.16f;
             move.Validate();AssetDatabase.CreateAsset(move,path);return move;
         }
         var opening=Move("Opening","Attack1",SumiSwordArc.Descending,.48f,new Vector2(.105f,.255f),new Vector2(.255f,.42f),21,.48f,false);

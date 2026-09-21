@@ -24,7 +24,7 @@ Shader "Sumi/Paper"
             {
                 float grain=hash(i.p.xy)*.009;
                 float wash=noise(i.world.xz*.19)*.016+noise(i.world.xz*1.7)*.007;
-                float3 paper=float3(.75,.741,.697)+grain-wash;
+                float3 paper=_BaseColor.rgb+grain-wash;
                 return half4(MixFog(paper,i.fog),1);
             }
             ENDHLSL

@@ -18,7 +18,7 @@ namespace Sumi
         Transform hips,leftThigh,rightThigh;
         readonly List<Vector2Int> links=new List<Vector2Int>();
         float[] lengths;
-        Vector3 lastRoot;
+        Vector3 lastRoot,shock;
         float accumulator;
         void Start()
         {
@@ -68,6 +68,16 @@ namespace Sumi
         }
         Vector3 Target(int i)=>anchors[i/Count].TransformPoint(rest[i]);
         bool Pinned(int i)=>i%Count<Cols;
+        public void Shock(Vector3 worldForce)
+        {
+            shock+=worldForce;
+            if(current==null)return;
+            for(int i=0;i<current.Length;i++)if(!Pinned(i))
+            {
+                float t=(i%Count/Cols)/(Rows-1f);
+                current[i]+=worldForce*(.008f+.028f*t);
+            }
+        }
         void LateUpdate()
         {
             if(mesh==null||Time.deltaTime<=0)return;
@@ -83,7 +93,7 @@ namespace Sumi
                 {
                     if(Pinned(i)){current[i]=previous[i]=Target(i);continue;}
                     var old=current[i];float t=(i%Count/Cols)/(Rows-1f);
-                    Vector3 force=Vector3.down*1.8f+wind*(.5f+t*2);
+                    Vector3 force=Vector3.down*1.8f+wind*(.5f+t*2)+shock*t;
                     current[i]+=(current[i]-previous[i])*.93f+force*dt*dt;
                     // A weak shape force supplies fabric bending resistance, not rigid following.
                     current[i]+=(Target(i)-current[i])*dt*(5.5f-t*3.0f);
@@ -115,6 +125,7 @@ namespace Sumi
             maxDisplacement=0;
             for(int i=0;i<current.Length;i++){vertices[i]=transform.InverseTransformPoint(current[i]);maxDisplacement=Mathf.Max(maxDisplacement,Vector3.Distance(current[i],Target(i)));}
             mesh.vertices=vertices;mesh.RecalculateNormals();mesh.RecalculateBounds();
+            shock=Vector3.Lerp(shock,Vector3.zero,1-Mathf.Exp(-3.5f*Time.deltaTime));
         }
         void Collide(ref Vector3 p,Vector3 center,float radius)
         {radius*=transform.lossyScale.x;Vector3 d=p-center;float length=d.magnitude;if(length<radius&&length>.001f)p=center+d*(radius/length);}

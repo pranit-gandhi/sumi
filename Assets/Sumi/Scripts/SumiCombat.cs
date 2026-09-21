@@ -3,34 +3,9 @@ using UnityEngine;
 
 namespace Sumi
 {
-    public enum SumiCombatState { Free,Attack1,Attack2,Attack3,GuardStartup,GuardHeld,GuardRecovery,Dash,DashStrike,HitStun,Dead,HeavyAttack }
-    public enum SumiHitKind { ShoulderCut,DashCut,HeavyCut,Finisher,InkDart }
+    public enum SumiCombatState { Free,Attack1,Attack2,Attack3,GuardStartup,GuardHeld,GuardRecovery,Dash,DashStrike,HitStun,Dead,HeavyAttack,ShurikenThrow }
+    public enum SumiHitKind { ShoulderCut,DashCut,HeavyCut,Finisher,Shuriken }
     public enum SumiEnemyState { Observe,Approach,Windup,Strike,Recovery,Recoil,Dead }
-
-    public sealed class SumiInkDart : MonoBehaviour
-    {
-        Vector3 direction;float damage,expires;
-        TrailRenderer stroke;
-        public void Init(Vector3 origin,Vector3 flight,float hitDamage)
-        {
-            transform.position=origin;direction=flight.normalized;damage=hitDamage;expires=Time.time+1.15f;
-            var body=GameObject.CreatePrimitive(PrimitiveType.Sphere);body.name="Ink tip";body.transform.SetParent(transform,false);body.transform.localScale=Vector3.one*.16f;
-            Destroy(body.GetComponent<Collider>());body.GetComponent<Renderer>().sharedMaterial=SumiArt.Black;
-            stroke=gameObject.AddComponent<TrailRenderer>();stroke.sharedMaterial=SumiArt.Black;stroke.time=.16f;stroke.startWidth=.13f;stroke.endWidth=.005f;stroke.minVertexDistance=.025f;
-        }
-        void Update()
-        {
-            Vector3 from=transform.position;transform.position+=direction*18f*Time.deltaTime;
-            foreach(var enemy in SumiEnemy.Active)
-            {
-                if(!enemy||enemy.dead)continue;
-                Vector3 center=enemy.transform.position+Vector3.up*1.2f;
-                if(Vector3.SqrMagnitude(Vector3.Project(center-from, direction)+from-center)<.75f*.75f&&Vector3.Dot(center-from,direction)>=-.3f&&Vector3.Dot(center-transform.position,direction)<=.3f)
-                {enemy.TakeHit(damage,direction,SumiHitKind.InkDart);SumiCombatFeedback.Hit(.035f,.12f,center);Destroy(gameObject);return;}
-            }
-            if(Time.time>=expires)Destroy(gameObject);
-        }
-    }
 
     static class SumiEnemyAppearance
     {
@@ -77,7 +52,7 @@ namespace Sumi
     public sealed class SumiEnemyScarf:MonoBehaviour
     {
         public Transform anchor;
-        readonly Vector3[][] points={new Vector3[6],new Vector3[6]};LineRenderer[] lines;bool ready;
+        readonly Vector3[][] points={new Vector3[6],new Vector3[6]};LineRenderer[] lines;bool ready;Vector3 shock;
         void Start()
         {
             lines=new LineRenderer[2];
@@ -86,16 +61,17 @@ namespace Sumi
                 var go=new GameObject(k==0?"Long ink scarf":"Broken ink scarf");go.transform.SetParent(transform,false);var line=go.AddComponent<LineRenderer>();lines[k]=line;line.useWorldSpace=true;line.positionCount=6;line.sharedMaterial=Resources.Load<Material>("Ronin/Soot silhouette");line.startWidth=k==0?.14f:.075f;line.endWidth=.012f;line.numCornerVertices=1;line.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;
             }
         }
+        public void Shock(Vector3 dir){shock+=dir;}
         void LateUpdate()
         {
-            if(!anchor||lines==null)return;Vector3 root=anchor.position+transform.up*.07f-transform.forward*.035f;
+            if(!anchor||lines==null)return;Vector3 root=anchor.position+transform.up*.07f-transform.forward*.035f;shock=Vector3.Lerp(shock,Vector3.zero,1-Mathf.Exp(-4f*Mathf.Max(Time.deltaTime,Time.unscaledDeltaTime*.15f)));
             if(!ready){for(int k=0;k<2;k++)for(int i=0;i<6;i++)points[k][i]=root-transform.forward*i*.13f-transform.up*i*.025f;ready=true;}
             for(int k=0;k<2;k++)
             {
                 points[k][0]=root+transform.right*(k==0?-.035f:.035f);
                 for(int i=1;i<6;i++)
                 {
-                    float t=i/5f;Vector3 wanted=points[k][i-1]-transform.forward*(.12f+t*.045f)-transform.up*(.018f+t*.018f)+transform.right*Mathf.Sin(Time.time*2.1f+i*1.7f+k)*.018f*t;
+                    float t=i/5f;Vector3 wanted=points[k][i-1]-transform.forward*(.12f+t*.045f)-transform.up*(.018f+t*.018f)+transform.right*Mathf.Sin(Time.time*2.1f+i*1.7f+k)*.018f*t+shock*(.04f+t*.11f);
                     points[k][i]=Vector3.Lerp(points[k][i],wanted,1-Mathf.Exp(-(13f-i)*Time.deltaTime));
                     points[k][i]=points[k][i-1]+Vector3.ClampMagnitude(points[k][i]-points[k][i-1],.14f+t*.065f);
                 }
@@ -115,18 +91,28 @@ namespace Sumi
     {
         static float until;static LineRenderer[] marks;static float[] expire;static int cursor;static Material ink,gold;
         static AudioSource audioSource;static AudioClip swing,fastSwing,impact,heavyImpact,parry;
-        public static void Hit(float stop,float kick){Hit(stop,kick,Vector3.zero);}
-        public static void Hit(float stop,float kick,Vector3 at){Freeze(stop);Play(kick>.18f?4:1);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(kick);if(at!=Vector3.zero)Mark(at,kick>.18f,false);}
-        public static void Block(Vector3 at){Freeze(.025f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.08f);Mark(at,false,false);}
-        public static void Parry(Vector3 at,Vector3 axis){Freeze(.075f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.30f);Mark(at,true,true,axis);}
+        public static float ComboShakeScale(int step)=>step<=1?1f:step==2?.55f:.36f;
+        public static void Hit(float stop,float kick){Hit(stop,kick,Vector3.zero,Vector3.zero);}
+        public static void Hit(float stop,float kick,Vector3 at){Hit(stop,kick,at,Vector3.zero);}
+        public static void Hit(float stop,float kick,Vector3 at,Vector3 axis,int comboStep=0)
+        {
+            Freeze(stop);Play(kick>.18f?4:1);
+            if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(kick*ComboShakeScale(comboStep),axis);
+            if(at!=Vector3.zero)Mark(at,kick>.18f,false,axis);
+        }
+        public static void Block(Vector3 at){Freeze(.025f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.14f);Mark(at,false,false);}
+        public static void ParryReady(Vector3 at,Vector3 axis){if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.11f,axis);Mark(at,false,true,axis);}
+        public static void Parry(Vector3 at,Vector3 axis){Freeze(.085f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.46f,axis);Mark(at,true,true,axis);}
         public static void WaistCut(SumiEnemy enemy,Vector3 at){Mark(new Vector3(enemy.transform.position.x,enemy.transform.position.y+.94f,enemy.transform.position.z),true,false,enemy.transform.right);}
-        public static void Swing(bool fast){Play(fast?3:0);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(fast?.035f:.012f);}
+        public static void PlayContact(bool heavy){EnsureAudio();Play(heavy?4:1);}
+        public static void Swing(bool fast,Vector3 direction=default,int comboStep=0){Play(fast?3:0);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick((fast?.20f:.13f)*ComboShakeScale(comboStep),direction);}
+        public static void Dash(Vector3 direction){if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Sway(.29f,direction);}
         public static void EnemySwing(bool fast){Play(fast?3:0);}
         public static void DashStroke(Vector3 from,Vector3 to)
         {
             Ensure();int index=cursor;cursor=(cursor+1)%marks.Length;var line=marks[index];Vector3 side=Vector3.Cross(Vector3.up,(to-from).normalized)*.08f;
-            line.sharedMaterial=ink;line.startWidth=.12f;line.endWidth=.006f;line.SetPosition(0,from+Vector3.up*.055f-side);line.SetPosition(1,Vector3.Lerp(from,to,.53f)+Vector3.up*.045f+side);line.SetPosition(2,to+Vector3.up*.035f);line.enabled=true;expire[index]=Time.unscaledTime+.45f;
-            int second=cursor;cursor=(cursor+1)%marks.Length;var echo=marks[second];echo.sharedMaterial=ink;echo.startWidth=.025f;echo.endWidth=.003f;Vector3 spread=side*4f;echo.SetPosition(0,from+Vector3.up*.08f+spread);echo.SetPosition(1,Vector3.Lerp(from,to,.57f)+Vector3.up*.06f+spread);echo.SetPosition(2,to+Vector3.up*.04f+spread);echo.enabled=true;expire[second]=Time.unscaledTime+.34f;
+            line.sharedMaterial=ink;line.startWidth=.18f;line.endWidth=.006f;line.SetPosition(0,from+Vector3.up*.055f-side);line.SetPosition(1,Vector3.Lerp(from,to,.53f)+Vector3.up*.045f+side);line.SetPosition(2,to+Vector3.up*.035f);line.enabled=true;expire[index]=Time.unscaledTime+.55f;
+            int second=cursor;cursor=(cursor+1)%marks.Length;var echo=marks[second];echo.sharedMaterial=gold;echo.startWidth=.045f;echo.endWidth=.002f;Vector3 spread=side*4f;echo.SetPosition(0,from+Vector3.up*.08f+spread);echo.SetPosition(1,Vector3.Lerp(from,to,.57f)+Vector3.up*.06f+spread);echo.SetPosition(2,to+Vector3.up*.04f+spread);echo.enabled=true;expire[second]=Time.unscaledTime+.42f;
         }
         static void Freeze(float stop){if(stop<=0)return;until=Mathf.Max(until,Time.unscaledTime+stop);SumiTime.HitStop(stop);}
         static void Ensure()
@@ -148,6 +134,6 @@ namespace Sumi
             line.sharedMaterial=gilded?gold:ink;line.startWidth=strong?.045f:.025f;line.endWidth=.006f;line.SetPosition(0,at-axis*d);line.SetPosition(1,at+Vector3.up*(strong?.12f:.07f));line.SetPosition(2,at+axis*d);line.enabled=true;expire[index]=Time.unscaledTime+(strong?.20f:.11f);
         }
         public static void Tick(){SumiTime.Tick();if(marks!=null)for(int i=0;i<marks.Length;i++)if(marks[i].enabled&&Time.unscaledTime>=expire[i])marks[i].enabled=false;}
-        public static void Clear(){SumiTime.Reset();until=0;if(marks!=null)for(int i=0;i<marks.Length;i++)if(marks[i])Object.Destroy(marks[i].gameObject);marks=null;if(ink)Object.Destroy(ink);if(gold)Object.Destroy(gold);if(audioSource)Object.Destroy(audioSource.gameObject);audioSource=null;swing=fastSwing=impact=heavyImpact=parry=null;}
+        public static void Clear(){SumiTime.Reset();until=0;if(marks!=null)for(int i=0;i<marks.Length;i++)if(marks[i])Object.Destroy(marks[i].gameObject);marks=null;if(ink)Object.Destroy(ink);if(gold)Object.Destroy(gold);if(audioSource)Object.Destroy(audioSource.gameObject);audioSource=null;swing=fastSwing=impact=heavyImpact=parry=null;SumiDeath.Clear();}
     }
 }

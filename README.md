@@ -9,11 +9,12 @@ Sumi is a Unity 6 third-person katana roguelite slice presented as a living mono
 - Mouse: camera
 - Left Mouse: buffered descending cut, return cut, sweeping finisher
 - `R` or Middle Mouse: overhead heavy; branch into it from either opening light cut
-- Right Mouse: hold guard; press just before contact for a perfect deflection
+- Right Mouse: hold guard
+- `Q`: dedicated timed parry; press just before contact for a perfect deflection
 - `Space`: buffered Brush Flash; cancel earlier after a confirmed hit
-- `Q`: toggle target lock
+- `Tab`: toggle target lock
 - `E`: finish a nearby enemy at 35% health or less (12% for the Oni)
-- `F`: throw an ink dart (3.5-second cooldown)
+- `F`: perform a drawn-out shuriken throw (3.5-second cooldown)
 - `F3`: toggle combat timing debug overlay
 - `Esc`: pause
 - `R`: restart after victory or death
@@ -24,7 +25,7 @@ Sumi is a Unity 6 third-person katana roguelite slice presented as a living mono
 2. Open `Assets/Scenes/SumiShrine.unity`.
 3. Enter Play Mode.
 
-The project uses URP 17.2.0. The run includes two randomized three-choice spell wheels, telegraphed arrow hazards, health and ink-dart upgrades, a three-hit sword combo, low-health executions, an Oni boss, pause, death, victory and restart.
+The project uses URP 17.2.0. The run includes two randomized three-choice spell wheels, telegraphed arrow hazards, health and shuriken upgrades, a three-hit sword combo, low-health executions, an Oni boss, pause, death, victory and restart.
 
 The run plays the supplied `Samurai.mp3` as looping background music and uses recorded sword swings, impacts, and parries. Music pauses with the pause screen.
 

@@ -30,8 +30,8 @@ Material:
     m_Ints: []
     m_Floats:
     - _Cutoff: 0.5
-    - _Porosity: 0.19
+    - _Porosity: 0.22
     m_Colors:
-    - _BaseColor: {r: 0.25, g: 0.25, b: 0.235, a: 1}
+    - _BaseColor: {r: 0.095, g: 0.086, b: 0.078, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

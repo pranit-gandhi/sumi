@@ -7,7 +7,7 @@ namespace Sumi
     public static class SumiSketchWorld
     {
         static Transform root;
-        static Material ink, charcoal, pale, stone, distant, roofWash;
+        static Material ink, charcoal, pale, stone, distant, roofWash, ground, grass, wet, amber, reflection, lightPool;
         static Texture2D atlas;
 
         public static Transform Build()
@@ -15,19 +15,25 @@ namespace Sumi
             var oldRandom=Random.state; Random.InitState(2209);
             root=new GameObject("Sumi — dimensional ink village").transform;
             atlas=Resources.Load<Texture2D>("Drawings/ShrineAtlas");
-            ink=SumiArt.Mat("Ink",new Color(.055f,.057f,.055f));
-            charcoal=SumiArt.Mat("CharcoalWood",new Color(.17f,.17f,.16f));
-            pale=SumiArt.Mat("Paper",new Color(.78f,.775f,.735f));
-            stone=SumiArt.Mat("Stone",new Color(.55f,.56f,.53f));
-            distant=SumiArt.Mat("DistantInk",new Color(.56f,.57f,.55f));
-            roofWash=SumiArt.Mat("RoofWash",new Color(.36f,.36f,.34f));
-            SetInk(ink,new Color(.07f,.071f,.067f),.10f);SetInk(charcoal,new Color(.25f,.25f,.235f),.19f);
-            SetInk(pale,new Color(.84f,.835f,.80f),.07f);SetInk(stone,new Color(.66f,.665f,.63f),.15f);
-            SetInk(distant,new Color(.75f,.75f,.72f),.29f);SetInk(roofWash,new Color(.58f,.58f,.55f),.27f);
+            ink=SumiArt.Mat("Ink",new Color(.028f,.026f,.024f));
+            charcoal=SumiArt.Mat("CharcoalWood",new Color(.095f,.086f,.078f));
+            pale=SumiArt.Mat("Paper",new Color(.36f,.34f,.31f));
+            stone=SumiArt.Mat("Stone",new Color(.19f,.18f,.165f));
+            distant=SumiArt.Mat("DistantInk",new Color(.20f,.145f,.115f));
+            roofWash=SumiArt.Mat("RoofWash",new Color(.105f,.095f,.087f));
+            ground=SumiArt.Mat("WetCharcoalGround",new Color(.13f,.125f,.118f));
+            grass=SumiArt.Mat("PaleGrass",new Color(.78f,.72f,.61f));
+            wet=SumiArt.Mat("DampPatch",new Color(.035f,.031f,.028f),true);
+            amber=SumiArt.Mat("LanternGlow",new Color(2.2f,.82f,.19f),true);
+            reflection=SumiArt.Mat("AmberReflection",new Color(1.45f,.48f,.10f),true);
+            lightPool=SumiArt.Mat("LanternLightPool",new Color(.72f,.26f,.065f),true);
+            SetInk(ink,new Color(.028f,.026f,.024f),.13f);SetInk(charcoal,new Color(.095f,.086f,.078f),.22f);
+            SetInk(pale,new Color(.36f,.34f,.31f),.10f);SetInk(stone,new Color(.19f,.18f,.165f),.19f);
+            SetInk(distant,new Color(.20f,.145f,.115f),.31f);SetInk(roofWash,new Color(.105f,.095f,.087f),.29f);
 
             // One generous brush-painted courtyard. The middle stays empty and readable while
             // four gates, dwellings and mountain washes imply a settlement continuing forever.
-            SumiArt.Box("Unbroken paper arena",root,new Vector3(0,-.18f,0),new Vector3(74,.35f,74),SumiArt.Mat("BarePaper",new Color(.88f,.88f,.855f),true),true);
+            SumiArt.Box("Damp charcoal courtyard",root,new Vector3(0,-.18f,0),new Vector3(86,.35f,92),ground,true);
             for(int ring=0;ring<5;ring++) for(int i=0;i<28;i++)
             {
                 float a=i*Mathf.PI*2/28f+ring*.027f,r=5.2f+ring*3.1f;
@@ -43,8 +49,11 @@ namespace Sumi
                 float a=quadrant*Mathf.PI*.5f+.70f;Vector3 radial=new Vector3(Mathf.Sin(a),0,Mathf.Cos(a));int side=radial.x<0?-1:1;
                 Hut(root,radial*28f,Random.Range(.84f,1.05f),side,quadrant);Lantern(root,radial*18.8f,Random.Range(.82f,1.05f),quadrant);
             }
-            for(int i=0;i<20;i++){float a=i*Mathf.PI*2/20f+Random.Range(-.08f,.08f),r=Random.Range(23.5f,29f);Vector3 p=new Vector3(Mathf.Sin(a)*r,0,Mathf.Cos(a)*r);if(i%4==0)Pine(root,p,Random.Range(.75f,1.12f));else BrushBush(root,p,Random.Range(.72f,1.2f),i);}
-            for(int i=0;i<12;i++){float a=i*Mathf.PI*2/12f;Mountain(new Vector3(Mathf.Sin(a)*52f,-1,Mathf.Cos(a)*52f),Random.Range(20f,31f),Random.Range(13f,23f),i);}
+            BuildGroundComposition();
+            BuildLanternRhythm();
+            BuildPerimeterDressing();
+            BuildDistantSettlement();
+            BuildMountainLayers();
             for(int i=0;i<24;i++){float a=i*Mathf.PI*2/24f;Vector3 p=new Vector3(Mathf.Sin(a)*21f,1,Mathf.Cos(a)*21f);var w=SumiArt.Box("Invisible arena wall",root,p,new Vector3(5.7f,2,.32f),ink,true);w.transform.rotation=Quaternion.Euler(0,a*Mathf.Rad2Deg,0);w.GetComponent<Renderer>().enabled=false;}
             EncounterAnchors();
             int accent=0;foreach(var r in root.GetComponentsInChildren<Renderer>()){if((r.name.Contains("Lantern chamber")||r.name.Contains("Torii crown")||r.name.Contains("Ridge brush"))&&accent++<18){var g=r.gameObject.AddComponent<SumiGoldSurface>();g.threshold=18+(accent%4)*19;}}
@@ -93,6 +102,9 @@ namespace Sumi
             {
                 LayeredRoof(t,new Vector3(0,4.24f,.35f),w*.67f,depth*.72f,1f,variant+11);
                 SumiArt.Box("Dark inner sanctuary",t,new Vector3(0,2.05f,depth*.25f-.05f),new Vector3(1.7f,2.2f,.12f),ink);
+                for(int panel=-1;panel<=1;panel++)SetNoShadows(SumiArt.Box("Veiled sanctuary glow",t,new Vector3(panel*1.02f,2.10f,depth*.285f),new Vector3(.68f,1.18f,.022f),amber));
+                var innerLight=new GameObject("Sanctuary practical light",typeof(Light));innerLight.transform.SetParent(t,false);innerLight.transform.localPosition=new Vector3(0,2.05f,-depth*.12f);
+                var shrineLight=innerLight.GetComponent<Light>();shrineLight.type=LightType.Point;shrineLight.color=new Color(1f,.47f,.14f);shrineLight.intensity=5.2f;shrineLight.range=8.2f;shrineLight.shadows=LightShadows.None;
                 for(int side=-1;side<=1;side+=2) Lantern(t,new Vector3(side*2.8f,1,-depth*.45f),.85f,side);
             }
             Rail(t,w,depth);
@@ -111,6 +123,11 @@ namespace Sumi
             for(int s=-1;s<=1;s+=2) TaperedPost(t,new Vector3(s*w*.49f,1.62f,-depth*.45f),2.42f,.22f);
             SumiArt.Box("Side wall wash",t,new Vector3(0,1.58f,depth*.38f),new Vector3(w,2,.16f),pale,true);
             LayeredRoof(t,new Vector3(0,2.62f,0),w+1.45f,depth+1.25f,Random.Range(.78f,1.04f),variant);
+            if(variant%3!=1)
+            {
+                var window=SumiArt.Box("Restrained amber window",t,new Vector3(side*.62f,1.58f,-depth*.555f),new Vector3(.76f,.66f,.018f),amber);
+                SetNoShadows(window);
+            }
             if(variant%3==0)
             {
                 var banner=SumiArt.Box("Wind-worn noren",t,new Vector3(0,1.62f,-depth*.55f),new Vector3(1.55f,1.38f,.025f),pale).transform;
@@ -181,10 +198,131 @@ namespace Sumi
             SumiArt.Shape("Irregular lantern foundation",t,IrregularSlab(170+variant),new Vector3(0,.10f,0),new Vector3(.92f,.22f,.88f),stone,true);
             SumiArt.Shape("Tapered lantern stem",t,SumiArt.Lathe("LanternStem",new[]{.24f,.19f,.15f,.18f},new[]{-.5f,-.42f,.42f,.5f},7),new Vector3(0,.76f,0),new Vector3(1,1.1f,1),stone);
             SumiArt.Box("Lantern chamber shadow",t,new Vector3(0,1.46f,0),new Vector3(.62f,.52f,.60f),ink);
-            for(int s=-1;s<=1;s+=2) SumiArt.Box("Lantern paper slit",t,new Vector3(s*.315f,1.46f,0),new Vector3(.018f,.25f,.29f),pale);
+            for(int s=-1;s<=1;s+=2)
+            {
+                SumiArt.Box("Lantern paper slit",t,new Vector3(s*.315f,1.46f,0),new Vector3(.018f,.25f,.29f),pale);
+                SetNoShadows(SumiArt.Box("Amber lantern core",t,new Vector3(s*.326f,1.46f,0),new Vector3(.014f,.205f,.23f),amber));
+                SetNoShadows(SumiArt.Box("Amber lantern core",t,new Vector3(0,1.46f,s*.316f),new Vector3(.23f,.205f,.014f),amber));
+            }
             SumiArt.Shape("Lantern rain cap",t,SumiArt.Lathe("LanternCap",new[]{0f,.72f,.58f,.20f,0f},new[]{-.15f,-.13f,0,.26f,.29f},8),new Vector3(0,1.82f,0),Vector3.one,stone);
             SumiArt.Shape("Lantern finial",t,SumiArt.Lathe("LanternFinial",new[]{.18f,.12f,.03f},new[]{0,.22f,.48f},7),new Vector3(0,2.03f,0),Vector3.one,stone);
             InkPanel(t,"Lantern ink drawing",3,new Vector3(0,.02f,-.38f),2.05f,2.2f,.58f);
+            var glow=new GameObject("Warm practical light",typeof(Light));glow.transform.SetParent(t,false);glow.transform.localPosition=new Vector3(0,1.48f,0);
+            var point=glow.GetComponent<Light>();point.type=LightType.Point;point.color=new Color(1f,.52f,.18f);point.intensity=4.2f;point.range=5.4f;point.shadows=LightShadows.None;point.renderMode=LightRenderMode.Auto;
+            var pool=SumiArt.Box("Soft lantern illumination pool",parent,pos+new Vector3(0,.014f,0),new Vector3(5.2f,.012f,5.2f),lightPool);SetNoShadows(pool);
+            WetReflection(parent,pos+new Vector3(0,.018f,-2.35f),new Vector3(.82f,.018f,5.4f),variant);
+        }
+
+        static void BuildGroundComposition()
+        {
+            var dressing=SumiArt.Node("Ground detail — clustered and readable",root,Vector3.zero);
+            // A broken route leads toward the shrine without becoming a hard gameplay lane.
+            for(int i=0;i<15;i++)
+            {
+                float z=-8f+i*2.45f;float x=Mathf.Sin(i*1.77f)*1.05f+Random.Range(-.22f,.22f);
+                var slab=SumiArt.Shape("Weathered approach stone",dressing,IrregularSlab(310+i),new Vector3(x,-.012f,z),new Vector3(Random.Range(1.55f,2.55f),.105f,Random.Range(.72f,1.25f)),i%4==0?stone:charcoal);
+                slab.transform.localRotation=Quaternion.Euler(0,Random.Range(-13f,13f),0);
+            }
+            // Low-frequency damp islands create value and roughness variation while keeping the centre calm.
+            for(int i=0;i<18;i++)
+            {
+                float a=Random.Range(0,Mathf.PI*2),r=Random.Range(i<5?5.5f:10f,25f);Vector3 p=new Vector3(Mathf.Sin(a)*r,-.005f,Mathf.Cos(a)*r);
+                var patch=SumiArt.Shape("Shallow damp ink patch",dressing,IrregularSlab(400+i),p,new Vector3(Random.Range(2.4f,6.2f),.025f,Random.Range(1.5f,4.4f)),wet);
+                patch.transform.localRotation=Quaternion.Euler(0,Random.Range(0,180),0);SetNoShadows(patch);
+            }
+            for(int i=0;i<22;i++)
+            {
+                float a=Random.Range(0,Mathf.PI*2),r=Random.Range(18.5f,30f);Rock(dressing,new Vector3(Mathf.Sin(a)*r,0,Mathf.Cos(a)*r),Random.Range(.45f,1.35f),500+i);
+            }
+            // Sparse reflected dashes complete the approach composition without becoming a painted road.
+            for(int i=0;i<9;i++)
+            {
+                float z=6.5f+i*1.72f+Random.Range(-.18f,.18f),x=(i%2==0?-1f:1f)*Random.Range(.75f,2.35f);
+                var glint=SumiArt.Shape("Gateward amber reflection",dressing,IrregularSlab(1160+i),new Vector3(x,.022f,z),new Vector3(Random.Range(.16f,.32f),.012f,Random.Range(.75f,1.65f)),reflection);
+                glint.transform.localRotation=Quaternion.Euler(0,Random.Range(-7f,7f),0);SetNoShadows(glint);
+            }
+        }
+
+        static void BuildLanternRhythm()
+        {
+            var practicals=SumiArt.Node("Lantern path — warm visual rhythm",root,Vector3.zero);
+            Vector3[] positions={new Vector3(-11.8f,0,-12f),new Vector3(12.7f,0,-8f),new Vector3(-8.8f,0,-4.2f),new Vector3(9.4f,0,-1.2f),new Vector3(-13.2f,0,4.5f),new Vector3(12.2f,0,8.5f),new Vector3(-10.8f,0,18f),new Vector3(10.9f,0,20f)};
+            for(int i=0;i<positions.Length;i++)
+            {
+                Lantern(practicals,positions[i],Random.Range(.84f,1.03f),40+i);
+                Rock(practicals,positions[i]+new Vector3(i%2==0?1.1f:-1.05f,0,.38f),Random.Range(.55f,.92f),610+i);
+                GrassCluster(practicals,positions[i]+new Vector3(i%2==0?-1.15f:1.05f,0,.25f),Random.Range(.78f,1.1f),700+i);
+            }
+        }
+
+        static void BuildPerimeterDressing()
+        {
+            var perimeter=SumiArt.Node("Pale grass and ink perimeter",root,Vector3.zero);
+            for(int i=0;i<30;i++)
+            {
+                float a=i*Mathf.PI*2/30f+Random.Range(-.055f,.055f),r=Random.Range(23f,30.5f);Vector3 p=new Vector3(Mathf.Sin(a)*r,0,Mathf.Cos(a)*r);
+                if(i%5==0)Pine(perimeter,p,Random.Range(.70f,1.04f));
+                else if(i%3==0)BrushBush(perimeter,p,Random.Range(.68f,1.08f),i+90);
+                else GrassCluster(perimeter,p,Random.Range(.72f,1.24f),800+i);
+                if(i%4==1)Rock(perimeter,p+new Vector3(Random.Range(-1.1f,1.1f),0,Random.Range(-.8f,.8f)),Random.Range(.5f,1.2f),900+i);
+            }
+            // A few foreground edge clumps frame the camera without entering combat space.
+            GrassCluster(perimeter,new Vector3(-16.5f,0,-9.5f),1.35f,970);
+            GrassCluster(perimeter,new Vector3(17.2f,0,-7.4f),1.18f,971);
+        }
+
+        static void BuildDistantSettlement()
+        {
+            var village=SumiArt.Node("Mist-softened outer settlement",root,Vector3.zero);
+            Vector3[] huts={new Vector3(-22f,0,37f),new Vector3(-13f,0,42f),new Vector3(14f,0,41f),new Vector3(23f,0,36f),new Vector3(-32f,0,29f),new Vector3(32f,0,28f)};
+            for(int i=0;i<huts.Length;i++)Hut(village,huts[i],Random.Range(.46f,.68f),huts[i].x<0?-1:1,20+i);
+            Gate(village,new Vector3(-17f,0,34f),-1,.66f);Gate(village,new Vector3(18f,0,35f),1,.61f);
+            Shrine(village,new Vector3(30f,.5f,47f),.42f,false,32);
+        }
+
+        static void BuildMountainLayers()
+        {
+            var mountains=SumiArt.Node("Layered painted mountains",root,Vector3.zero);
+            // Front, middle and ghost ridges overlap laterally and fade into the warm fog.
+            for(int i=0;i<4;i++)Mountain(mountains,new Vector3(-36f+i*24f,-3f,52f),32f,Random.Range(13f,19f),100+i,.18f);
+            for(int i=0;i<3;i++)Mountain(mountains,new Vector3(-32f+i*32f,-1f,68f),42f,Random.Range(18f,25f),110+i,.095f);
+            for(int i=0;i<2;i++)Mountain(mountains,new Vector3(-25f+i*50f,2f,83f),54f,Random.Range(24f,31f),120+i,.045f);
+        }
+
+        static void GrassCluster(Transform parent,Vector3 pos,float scale,int seed)
+        {
+            var old=Random.state;Random.InitState(seed);var t=SumiArt.Node("Pale susuki cluster "+seed,parent,pos);t.localScale=Vector3.one*scale;t.localRotation=Quaternion.Euler(0,Random.Range(0,360f),0);
+            int count=Random.Range(10,15);
+            for(int i=0;i<count;i++)
+            {
+                Vector3 start=new Vector3(Random.Range(-.42f,.42f),.02f,Random.Range(-.28f,.28f));float h=Random.Range(.65f,1.55f);Vector3 bend=new Vector3(Random.Range(-.35f,.35f),h,Random.Range(-.28f,.28f));
+                TaperedStroke(t,start,bend,.018f,grass);
+                Vector3 plumeStart=Vector3.Lerp(start,bend,.72f),plumeEnd=bend+new Vector3(Random.Range(-.12f,.12f),.20f,Random.Range(-.08f,.08f));
+                TaperedStroke(t,plumeStart,plumeEnd,.075f,grass);
+            }
+            foreach(var r in t.GetComponentsInChildren<Renderer>()){r.shadowCastingMode=ShadowCastingMode.Off;r.receiveShadows=true;}
+            Random.state=old;
+        }
+
+        static void Rock(Transform parent,Vector3 pos,float scale,int seed)
+        {
+            var go=SumiArt.Shape("Partially buried anchor rock",parent,IrregularSlab(seed),pos+new Vector3(0,-.02f,0),new Vector3(scale,scale*Random.Range(.38f,.72f),scale*Random.Range(.72f,1.22f)),stone);
+            go.transform.localRotation=Quaternion.Euler(Random.Range(-7f,7f),Random.Range(0,180f),Random.Range(-5f,5f));
+        }
+
+        static void WetReflection(Transform parent,Vector3 pos,Vector3 scale,int seed)
+        {
+            for(int i=0;i<4;i++)
+            {
+                float length=scale.z*Random.Range(.45f,1.05f);Vector3 p=pos+new Vector3((i-1.5f)*.23f+Random.Range(-.08f,.08f),i*.006f,Random.Range(-.35f,.35f));
+                var go=SumiArt.Shape("Broken amber ground reflection",parent,IrregularSlab(1000+seed+i),p,new Vector3(scale.x*Random.Range(.14f,.31f),scale.y,length),reflection);
+                go.transform.localRotation=Quaternion.Euler(0,seed*37f%15f-7f,0);SetNoShadows(go);
+            }
+        }
+
+        static void SetNoShadows(GameObject go)
+        {
+            var r=go.GetComponent<Renderer>();if(!r)return;r.shadowCastingMode=ShadowCastingMode.Off;r.receiveShadows=false;
         }
 
         static void BrushBush(Transform parent,Vector3 pos,float scale,int seed)
@@ -218,6 +356,11 @@ namespace Sumi
         static void Mountain(Vector3 pos,float width,float height,int variant)
         {
             InkPanel(root,"Distant mountain wash "+variant,7,pos,width,height,.13f+variant*.012f);
+        }
+
+        static void Mountain(Transform parent,Vector3 pos,float width,float height,int variant,float opacity)
+        {
+            InkPanel(parent,"Painted mountain layer "+variant,7,pos,width,height,opacity);
         }
 
         static Mesh IrregularSlab(int seed)
@@ -277,9 +420,10 @@ namespace Sumi
 
         static void Atmosphere()
         {
-            var lightObject=new GameObject("Soft paper moonlight");lightObject.transform.SetParent(root);lightObject.transform.rotation=Quaternion.Euler(47,-32,0);
-            var sun=lightObject.AddComponent<Light>();sun.type=LightType.Directional;sun.color=new Color(.91f,.92f,.90f);sun.intensity=1.08f;sun.shadows=LightShadows.Soft;sun.shadowStrength=.52f;RenderSettings.sun=sun;
-            RenderSettings.skybox=null;RenderSettings.fog=true;RenderSettings.fogMode=FogMode.ExponentialSquared;RenderSettings.fogDensity=.0105f;RenderSettings.fogColor=new Color(.88f,.875f,.845f);RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=new Color(.82f,.82f,.79f);
+            var lightObject=new GameObject("Low dusk key light");lightObject.transform.SetParent(root);lightObject.transform.rotation=Quaternion.Euler(36,-28,0);
+            var sun=lightObject.AddComponent<Light>();sun.type=LightType.Directional;sun.color=new Color(.78f,.50f,.34f);sun.intensity=.82f;sun.shadows=LightShadows.Soft;sun.shadowStrength=.72f;RenderSettings.sun=sun;
+            RenderSettings.skybox=Resources.Load<Material>("Sumi/Evening Gradient Sky");RenderSettings.fog=true;RenderSettings.fogMode=FogMode.ExponentialSquared;RenderSettings.fogDensity=.0155f;RenderSettings.fogColor=new Color(.25f,.105f,.052f);RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=new Color(.17f,.115f,.085f);
+            var volumeObject=new GameObject("Burnt-orange night grade",typeof(Volume));volumeObject.transform.SetParent(root,false);var volume=volumeObject.GetComponent<Volume>();volume.isGlobal=true;volume.priority=0;volume.sharedProfile=Resources.Load<VolumeProfile>("Sumi/Atmosphere");
         }
     }
 }
