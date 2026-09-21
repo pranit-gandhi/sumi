@@ -309,6 +309,7 @@ namespace Sumi
             {
                 // A held block mitigates damage; only a timed deflection stops the attacker.
                 health=Mathf.Max(0,health-damage*.18f*(steadyHeart?.8f:1));damageGraceUntil=Time.time+.18f;
+                if(damage>0)SumiCombatFeedback.ContactDust(contact,-to.normalized,true);
                 SumiCombatFeedback.Block(contact);NotifyDamage(contact,-to.normalized,enemy.transform.position);return;
             }
             Damage(damage,.26f,contact,-to.normalized,enemy.transform.position,enemy.CurrentAttack!=null?enemy.CurrentAttack.arc:SumiSwordArc.Descending);
@@ -322,6 +323,7 @@ namespace Sumi
         }
         void Damage(float damage,float stun,Vector3 contact,Vector3 direction,Vector3 attacker,SumiSwordArc arc=SumiSwordArc.Descending)
         {
+            if(damage>0)SumiCombatFeedback.ContactDust(contact,direction,true);
             if(steadyHeart)damage*=.8f;health=Mathf.Max(0,health-damage);damageGraceUntil=Time.time+.52f;recovery=stun;
             if(health<=0)
             {

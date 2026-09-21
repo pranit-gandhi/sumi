@@ -89,7 +89,8 @@ namespace Sumi
 
     public static class SumiCombatFeedback
     {
-        static float until;static LineRenderer[] marks;static float[] expire;static int cursor;static Material ink,gold;
+        static float until;static LineRenderer[] marks;static float[] expire;static int cursor;static Material ink,gold,red;
+        static Vector3[] dustVelocity;static float[] dustBorn,dustWidth;
         static AudioSource audioSource;static AudioClip swing,fastSwing,impact,heavyImpact,parry;
         public static float ComboShakeScale(int step)=>step<=1?1f:step==2?.55f:.36f;
         public static void Hit(float stop,float kick){Hit(stop,kick,Vector3.zero,Vector3.zero);}
@@ -108,16 +109,32 @@ namespace Sumi
         public static void Swing(bool fast,Vector3 direction=default,int comboStep=0){Play(fast?3:0);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick((fast?.20f:.13f)*ComboShakeScale(comboStep),direction);}
         public static void Dash(Vector3 direction){if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Sway(.29f,direction);}
         public static void EnemySwing(bool fast){Play(fast?3:0);}
+        // Called at accepted damage, independently of combo strength, recoil and audio throttling.
+        public static void ContactDust(Vector3 at,Vector3 direction,bool enemyHit)
+        {
+            Ensure();if(direction.sqrMagnitude<.001f)direction=Vector3.right;direction.Normalize();
+            Vector3 side=Vector3.Cross(direction,Vector3.up);if(side.sqrMagnitude<.001f)side=Vector3.forward;side.Normalize();
+            for(int k=0;k<7;k++){
+                int index=cursor;cursor=(cursor+1)%marks.Length;var line=marks[index];
+                Vector3 spray=(direction*.45f+side*Mathf.Sin(k*2.4f)*.8f+Vector3.up*Mathf.Cos(k*1.7f)*.65f).normalized;
+                Vector3 p=at+spray*.035f;float length=k==0?.42f:.10f+(k%3)*.045f;
+                line.sharedMaterial=enemyHit?red:gold;line.startWidth=k==0?.048f:.024f;line.endWidth=.003f;
+                line.SetPosition(0,p-spray*length);line.SetPosition(1,p);line.SetPosition(2,p+spray*length*.4f);line.enabled=true;
+                dustVelocity[index]=spray*(1.2f+k*.17f);dustBorn[index]=Time.unscaledTime;dustWidth[index]=line.startWidth;
+                expire[index]=Time.unscaledTime+.27f;
+            }
+        }
         public static void DashStroke(Vector3 from,Vector3 to)
         {
             Ensure();int index=cursor;cursor=(cursor+1)%marks.Length;var line=marks[index];Vector3 side=Vector3.Cross(Vector3.up,(to-from).normalized)*.08f;
+            dustVelocity[index]=Vector3.zero;
             line.sharedMaterial=ink;line.startWidth=.18f;line.endWidth=.006f;line.SetPosition(0,from+Vector3.up*.055f-side);line.SetPosition(1,Vector3.Lerp(from,to,.53f)+Vector3.up*.045f+side);line.SetPosition(2,to+Vector3.up*.035f);line.enabled=true;expire[index]=Time.unscaledTime+.55f;
-            int second=cursor;cursor=(cursor+1)%marks.Length;var echo=marks[second];echo.sharedMaterial=gold;echo.startWidth=.045f;echo.endWidth=.002f;Vector3 spread=side*4f;echo.SetPosition(0,from+Vector3.up*.08f+spread);echo.SetPosition(1,Vector3.Lerp(from,to,.57f)+Vector3.up*.06f+spread);echo.SetPosition(2,to+Vector3.up*.04f+spread);echo.enabled=true;expire[second]=Time.unscaledTime+.42f;
+            int second=cursor;cursor=(cursor+1)%marks.Length;dustVelocity[second]=Vector3.zero;var echo=marks[second];echo.sharedMaterial=gold;echo.startWidth=.045f;echo.endWidth=.002f;Vector3 spread=side*4f;echo.SetPosition(0,from+Vector3.up*.08f+spread);echo.SetPosition(1,Vector3.Lerp(from,to,.57f)+Vector3.up*.06f+spread);echo.SetPosition(2,to+Vector3.up*.04f+spread);echo.enabled=true;expire[second]=Time.unscaledTime+.42f;
         }
         static void Freeze(float stop){if(stop<=0)return;until=Mathf.Max(until,Time.unscaledTime+stop);SumiTime.HitStop(stop);}
         static void Ensure()
         {
-            if(marks!=null)return;marks=new LineRenderer[12];expire=new float[12];ink=new Material(Shader.Find("Universal Render Pipeline/Unlit"));ink.color=new Color(.055f,.052f,.045f);gold=new Material(Shader.Find("Universal Render Pipeline/Unlit"));gold.color=new Color(.78f,.58f,.18f);
+            if(marks!=null)return;marks=new LineRenderer[96];expire=new float[96];dustVelocity=new Vector3[96];dustBorn=new float[96];dustWidth=new float[96];ink=new Material(Shader.Find("Universal Render Pipeline/Unlit"));ink.color=new Color(.055f,.052f,.045f);gold=new Material(Shader.Find("Universal Render Pipeline/Unlit"));gold.color=new Color(1f,.72f,.16f);red=new Material(Shader.Find("Universal Render Pipeline/Unlit"));red.color=new Color(.95f,.07f,.025f);
             for(int i=0;i<marks.Length;i++){var go=new GameObject("Pooled calligraphy contact");marks[i]=go.AddComponent<LineRenderer>();marks[i].useWorldSpace=true;marks[i].positionCount=3;marks[i].enabled=false;marks[i].textureMode=LineTextureMode.Stretch;}
         }
         static void EnsureAudio()
@@ -131,9 +148,22 @@ namespace Sumi
         static void Mark(Vector3 at,bool strong,bool gilded,Vector3 axis=default)
         {
             Ensure();int index=cursor;cursor=(cursor+1)%marks.Length;var line=marks[index];float d=strong?.62f:.27f;if(axis.sqrMagnitude<.01f)axis=Vector3.right;axis.Normalize();
+            dustVelocity[index]=Vector3.zero;
             line.sharedMaterial=gilded?gold:ink;line.startWidth=strong?.045f:.025f;line.endWidth=.006f;line.SetPosition(0,at-axis*d);line.SetPosition(1,at+Vector3.up*(strong?.12f:.07f));line.SetPosition(2,at+axis*d);line.enabled=true;expire[index]=Time.unscaledTime+(strong?.20f:.11f);
         }
-        public static void Tick(){SumiTime.Tick();if(marks!=null)for(int i=0;i<marks.Length;i++)if(marks[i].enabled&&Time.unscaledTime>=expire[i])marks[i].enabled=false;}
-        public static void Clear(){SumiTime.Reset();until=0;if(marks!=null)for(int i=0;i<marks.Length;i++)if(marks[i])Object.Destroy(marks[i].gameObject);marks=null;if(ink)Object.Destroy(ink);if(gold)Object.Destroy(gold);if(audioSource)Object.Destroy(audioSource.gameObject);audioSource=null;swing=fastSwing=impact=heavyImpact=parry=null;SumiDeath.Clear();}
+        public static void Tick(){
+            SumiTime.Tick();if(marks==null)return;
+            for(int i=0;i<marks.Length;i++){
+                if(!marks[i].enabled)continue;
+                if(Time.unscaledTime>=expire[i]){marks[i].enabled=false;dustVelocity[i]=Vector3.zero;continue;}
+                if(dustVelocity[i].sqrMagnitude>.001f){
+                    float t=Mathf.Clamp01((Time.unscaledTime-dustBorn[i])/.27f);
+                    Vector3 shift=dustVelocity[i]*Time.unscaledDeltaTime;
+                    for(int p=0;p<3;p++)marks[i].SetPosition(p,marks[i].GetPosition(p)+shift);
+                    marks[i].startWidth=dustWidth[i]*(1-t);marks[i].endWidth=.003f*(1-t);
+                }
+            }
+        }
+        public static void Clear(){SumiTime.Reset();until=0;if(marks!=null)for(int i=0;i<marks.Length;i++)if(marks[i])Object.Destroy(marks[i].gameObject);marks=null;if(ink)Object.Destroy(ink);if(gold)Object.Destroy(gold);if(red)Object.Destroy(red);if(audioSource)Object.Destroy(audioSource.gameObject);audioSource=null;swing=fastSwing=impact=heavyImpact=parry=null;SumiDeath.Clear();}
     }
 }

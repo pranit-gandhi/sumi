@@ -205,6 +205,7 @@ namespace Sumi
         public void TakeHit(float damage,Vector3 direction,SumiHitKind hitKind,Vector3 hitPoint,SumiSwordArc arc,Vector3 cut)
         {
             if(dead)return;
+            if(damage>0)SumiCombatFeedback.ContactDust(hitPoint,cut,false);
             health-=damage;
             if(health<=0)
             {
@@ -214,6 +215,14 @@ namespace Sumi
                 return;
             }
             if(kind==SumiEnemyKind.Oni&&!Enraged&&health<=maxHealth*.55f)phasePending=true;
+            // A landed shuriken should visibly knock the target off balance. Reuse the successful
+            // deflection pose and shove, but keep its opening shorter than a true parry reward.
+            // Twin Stars may land almost together, so an active recoil is never restarted.
+            if(hitKind==SumiHitKind.Shuriken)
+            {
+                if(state!=SumiEnemyState.Recoil)Recoil(.48f,true);
+                return;
+            }
             bool strong=hitKind==SumiHitKind.HeavyCut||hitKind==SumiHitKind.Finisher;
             // Bracing resists light hits, but takes full damage. Heavy cuts break the windup.
             if(Braced&&!(hitKind==SumiHitKind.HeavyCut&&state==SumiEnemyState.Windup))

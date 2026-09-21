@@ -117,7 +117,7 @@ namespace Sumi
         {
             if(playerRenderers==null&&player)playerRenderers=player.GetComponentsInChildren<Renderer>(true);
             if(playerRenderers==null)return;
-            foreach(var r in playerRenderers)if(r)r.enabled=visible;
+            foreach(var r in playerRenderers)if(r)r.enabled=visible&&r.name!="Broken kasa strokes"&&r.name!="Kasa woven ribs";
         }
         void Update()
         {
@@ -418,7 +418,7 @@ namespace Sumi
             float brandY=h*.10f;
             GUI.Label(new Rect(w*.1f,brandY,w*.8f,Mathf.RoundToInt(h*.14f)),Identity.Title,brand??menuItemLit??GUI.skin.label);
             InkRule(w*.38f,brandY+h*.13f,w*.24f,2.2f,new Color(.86f,.82f,.72f,.38f));
-            float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(44,h*.058f),ix=(w-iw)*.5f,iy=h*.44f,gap=ih*1.18f;
+        float iw=Mathf.Clamp(w*.34f,280,460),ih=Mathf.Max(44,h*.058f),ix=(w-iw)*.5f,iy=h*.50f,gap=ih*1.18f;
             if(TitleChoice(new Rect(ix,iy,iw,ih),"BEGIN JOURNEY"))BeginJourney();
             if(TitleChoice(new Rect(ix,iy+gap,iw,ih),"CONTROLS"))OpenControls(true);
             if(TitleChoice(new Rect(ix,iy+gap*2f,iw,ih),"COMBOS"))OpenCombos(true);

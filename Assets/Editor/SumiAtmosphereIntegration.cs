@@ -28,7 +28,7 @@ public static class SumiAtmosphereIntegration
   var m=new Mesh{name=name};m.indexFormat=IndexFormat.UInt32;m.SetVertices(v);m.SetTriangles(tri,0);
   if(colors!=null)m.SetColors(colors);m.RecalculateNormals();m.RecalculateBounds();
   string path=Folder+"/"+name+".asset";var saved=AssetDatabase.LoadAssetAtPath<Mesh>(path);
-  if(saved){EditorUtility.CopySerialized(m,saved);Object.DestroyImmediate(m);EditorUtility.SetDirty(saved);return saved;}
+  if(saved){saved.Clear();saved.indexFormat=m.indexFormat;saved.vertices=m.vertices;saved.triangles=m.triangles;saved.normals=m.normals;if(colors!=null)saved.colors=m.colors;saved.bounds=m.bounds;saved.UploadMeshData(false);Object.DestroyImmediate(m);EditorUtility.SetDirty(saved);return saved;}
   AssetDatabase.CreateAsset(m,path);return m;
  }
  static GameObject Shape(string name,Transform parent,Mesh mesh,Material mat){
@@ -81,13 +81,21 @@ public static class SumiAtmosphereIntegration
   // Three closed, irregular ridgelines surround the world. They have solid mass,
   // uneven peaks and different parallax, not repeated transparent atlas wallpaper.
   for(int layer=0;layer<3;layer++){
-   var v=new List<Vector3>();var tr=new List<int>();var colors=new List<Color>();int n=256;
+   var v=new List<Vector3>();var tr=new List<int>();var colors=new List<Color>();int n=1024;
    float radius=54+layer*14;
    for(int i=0;i<=n;i++){
     float a=i*Mathf.PI*2/n;
-    float peak=Mathf.Pow(Mathf.PerlinNoise(Mathf.Cos(a)*3.6f+layer*11+7,Mathf.Sin(a)*3.6f+17),2);
-    float rough=Mathf.PerlinNoise(Mathf.Cos(a)*22+layer*7,Mathf.Sin(a)*22+9);
-    float height=1.2f+layer*1.5f+peak*(12+layer*8)+rough*.85f;
+    // Asymmetric angular peaks with small broken shoulders, not smooth noise domes.
+    float peak=0;
+    for(int j=0;j<11;j++){
+     float centre=j*Mathf.PI*2/11+Mathf.Sin(j*7.3f+layer)*.17f+layer*.21f;
+     float offset=Mathf.DeltaAngle(a*Mathf.Rad2Deg,centre*Mathf.Rad2Deg)*Mathf.Deg2Rad;
+     float width=offset<0?.23f:.38f;
+     peak=Mathf.Max(peak,Mathf.Max(0,1-Mathf.Abs(offset)/width)*(.48f+.52f*Mathf.PerlinNoise(j*2.7f,layer+3)));
+    }
+    float rough=Mathf.PerlinNoise(Mathf.Cos(a)*35+layer*7,Mathf.Sin(a)*35+9);
+    float teeth=Mathf.PerlinNoise(Mathf.Cos(a)*113+layer,Mathf.Sin(a)*113+8);
+    float height=.8f+layer*1.25f+peak*(3.2f+layer*1.8f)+rough*.65f+teeth*.27f;
     float r=radius+Mathf.Sin(a*7+layer)*2.2f;
     v.Add(new Vector3(Mathf.Sin(a)*r,-1.4f,Mathf.Cos(a)*r));v.Add(new Vector3(Mathf.Sin(a)*r,height,Mathf.Cos(a)*r));
     float wash=R(.7f,1.2f);colors.Add(new Color(.6f,.6f,.6f));colors.Add(new Color(wash,wash,wash));
@@ -95,6 +103,31 @@ public static class SumiAtmosphereIntegration
    }
    Shape("Overlapping mountain mass "+layer,root,SaveMesh("Ridge"+layer,v,tr,colors),mat);
   }
+ }
+ [MenuItem("Sumi/Polish Mountains and Sun")]
+ public static void PolishSky(){
+  if(EditorApplication.isPlaying)throw new InvalidOperationException("Stop Play Mode first.");
+  var root=GameObject.Find(RootName);if(!root)throw new InvalidOperationException("Atmosphere integration root missing.");
+  foreach(var t in root.GetComponentsInChildren<Transform>().Where(t=>t.name.StartsWith("Overlapping mountain mass")).ToArray())Object.DestroyImmediate(t.gameObject);
+  rng=new System.Random(92171);
+  BuildRidges(root.transform,AssetDatabase.LoadAssetAtPath<Material>("Assets/Sumi/Resources/Sumi/AtmosphericRidge.mat"));
+  var light=root.GetComponent<SumiEnvironmentLighting>();if(light)light.Publish();
+  AssetDatabase.SaveAssets();EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());EditorSceneManager.SaveOpenScenes();
+  Debug.Log("SUMI_SKY_POLISH_APPLIED");
+ }
+ public static void CaptureMenu(){
+  SumiAutomation.CaptureAt("Logs/sky-menu.png",1600,900);
+ }
+ public static void InspectSky(){
+  string text=string.Join("\n",Object.FindObjectsByType<MeshFilter>(FindObjectsSortMode.None).Where(f=>f.name.Contains("mountain mass")).Select(f=>f.name+" "+f.sharedMesh.name+" bounds="+f.sharedMesh.bounds+" scale="+f.transform.lossyScale+" position="+f.transform.position+" asset="+AssetDatabase.GetAssetPath(f.sharedMesh)));
+  File.WriteAllText("Logs/sky-inspect.txt",text);
+ }
+ public static void BeginPreview(){
+  if(!EditorApplication.isPlaying)throw new InvalidOperationException("Play Mode required.");
+  SumiGame.I.run.DebugBeginJourney();
+ }
+ public static void CaptureGameplay(){
+  SumiAutomation.CaptureAt("Logs/sky-gameplay.png",1600,900);
  }
  static void BuildMargins(Transform root,Material mat){
   var v=new List<Vector3>();var tr=new List<int>();const int n=192,rows=9;

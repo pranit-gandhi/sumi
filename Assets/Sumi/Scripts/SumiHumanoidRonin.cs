@@ -21,6 +21,8 @@ namespace Sumi
         {
             player=source;
             visual=Instantiate(Resources.Load<GameObject>("Ronin/Humanoid"),transform,false).transform;
+            foreach(var renderer in visual.GetComponentsInChildren<Renderer>(true))
+                if(renderer.name=="Broken kasa strokes"||renderer.name=="Kasa woven ribs")renderer.enabled=false;
             animator=visual.GetComponent<Animator>();animator.applyRootMotion=false;
             guardIK=visual.gameObject.AddComponent<SumiGuardIK>();guardIK.player=player;
             player.rig=visual.gameObject.AddComponent<SumiRig>();player.rig.enabled=false;player.rig.animator=animator;
