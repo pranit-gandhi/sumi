@@ -59,7 +59,8 @@ namespace Sumi
         [Min(.2f)] public float enemyVaporDuration=.66f;
         [Header("Ink / particles")]
         [Min(.1f)] public float deathParticleScale=1f;
-        [Min(0)] public float inkSpreadDuration=.85f;
+        [Min(0)] public float inkFadeDelay=.85f;
+        [Min(0)] public float inkSpreadDuration=1.65f;
         [Min(0)] public float restartInputDelay=.55f;
         [Min(0)] public float skipRestartHold=.12f;
     }

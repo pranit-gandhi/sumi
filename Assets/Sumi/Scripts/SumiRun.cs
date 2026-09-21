@@ -393,7 +393,8 @@ namespace Sumi
         void DrawDeathMenu(float w,float h)
         {
             float reveal=SumiDeath.UiReveal;if(reveal<.02f)return;
-            float a=Mathf.SmoothStep(0,1,Mathf.Clamp01((reveal-.06f)/.28f));
+            // Stretch the wash across nearly the whole reveal so death reads before the menu owns the frame.
+            float a=Mathf.SmoothStep(0,1,Mathf.Clamp01((reveal-.03f)/.90f));
             Color old=GUI.color;
             GUI.color=new Color(.010f,.010f,.012f,.60f*a);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
             Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.78f*a));

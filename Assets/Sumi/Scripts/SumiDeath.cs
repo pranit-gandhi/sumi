@@ -147,7 +147,8 @@ namespace Sumi
             deathAt=poseAt+(player?feel.playerRealization:feel.deathPoseHold)*v;
             dropAt=poseAt+(player?feel.playerWeaponDropDelay:feel.enemyWeaponDropDelay)*v;
             landAt=poseAt+(player?feel.playerLandDelay:feel.enemyLandDelay)*v;
-            inkAt=landAt+.04f;
+            // Hold the aftermath readable, then let the wash grow slowly over inkSpreadDuration.
+            inkAt=landAt+(player?feel.inkFadeDelay:.04f);
             vaporAt=float.PositiveInfinity;
             if(split){dropAt=born;landAt=poseAt+.18f;deathPlayed=true;}
         }
@@ -298,7 +299,7 @@ namespace Sumi
         static MeshRenderer[] marks;static float[] markLife,markBorn,markDry;static Color[] markTint;static int markCursor;
         static Material ink,crimson,markMat;
         static MaterialPropertyBlock block;
-        static AudioSource source,cueSource;static AudioClip[] deathHits;static AudioClip metal,thud,cue;
+        static AudioSource source,cueSource;static AudioClip[] deathHits;static AudioClip thud,cue;
         static int lastEnemyHit=-1;static float cueFadeAt=-1;
         static Volume tickVolume;static float tickUntil;
         static Texture2D brush;
@@ -427,14 +428,15 @@ namespace Sumi
         public static void PlayImpact(in SumiFatalHit hit)
         {
             Ensure();
-            SumiCombatFeedback.PlayContact(hit.wasCritical||hit.isPlayer||hit.isBoss);
+            // Enemy deaths keep the growl alone — the combat sword clang was reading as a sharp beep over it.
+            if(hit.isPlayer)SumiCombatFeedback.PlayContact(true);
             bool weighty=hit.isBoss||hit.attackType==SumiHitKind.HeavyCut||hit.attackType==SumiHitKind.Finisher;
             int[] pool=hit.isPlayer?new[]{6,11,5}:hit.split?new[]{3,7}:weighty?new[]{5,6,11}:new[]{3,7,4,8,9,10};
             int pick=pool[Mathf.Abs(hit.seed%pool.Length)];
             if(!hit.isPlayer&&pick==lastEnemyHit)pick=pool[(System.Array.IndexOf(pool,pick)+1)%pool.Length];
             if(!hit.isPlayer)lastEnemyHit=pick;
             AudioClip clip=deathHits[pick];
-            if(clip)Play(clip,hit.isPlayer?.86f:hit.isBoss||hit.wasCritical?.68f:.61f);
+            if(clip)Play(clip,hit.isPlayer?.86f:hit.isBoss?.98f:.96f);
         }
         public static void PlayDeathCue()
         {
@@ -442,7 +444,7 @@ namespace Sumi
             cueFadeAt=-1;cueSource.Stop();cueSource.clip=cue;cueSource.volume=.78f;cueSource.Play();
         }
         public static void FadeDeathCue(){if(cueSource&&cueSource.isPlaying)cueFadeAt=Time.unscaledTime;}
-        public static void PlayWeaponDrop(Vector3 at,bool heavy){Ensure();source.transform.position=at;Play(metal,heavy?.8f:.62f);}
+        public static void PlayWeaponDrop(Vector3 at,bool heavy){Ensure();source.transform.position=at;}
         public static void DropWeapon(Transform sword,Vector3 impulse)
         {
             if(!sword)return;Ensure();
@@ -513,7 +515,7 @@ namespace Sumi
             if(source)Object.Destroy(source.gameObject);source=null;
             if(cueSource)Object.Destroy(cueSource.gameObject);cueSource=null;
             if(tickVolume){if(tickVolume.sharedProfile)Object.Destroy(tickVolume.sharedProfile);Object.Destroy(tickVolume.gameObject);tickVolume=null;}
-            deathHits=null;metal=thud=cue=null;cueFadeAt=-1;lastEnemyHit=-1;
+            deathHits=null;thud=cue=null;cueFadeAt=-1;lastEnemyHit=-1;
             if(brush)Object.Destroy(brush);brush=null;katanaMat=null;block=null;
         }
         static void Stroke(Vector3 a,Vector3 b,Vector3 c,float start,float end,float life,bool red)
@@ -555,7 +557,6 @@ namespace Sumi
             deathHits=new AudioClip[12];for(int i=3;i<=11;i++)deathHits[i]=Resources.Load<AudioClip>("Sumi/Audio/DeathHit"+i);
             var music=new GameObject("Sumi game over music");cueSource=music.AddComponent<AudioSource>();cueSource.playOnAwake=false;cueSource.loop=false;cueSource.spatialBlend=0;
             cue=Resources.Load<AudioClip>("Sumi/Audio/DeathOfANinja");
-            metal=Tone("Katana drop",4200,t=>Mathf.Sin(t*1860*Mathf.PI*2)*Mathf.Exp(-t*6)*.3f+Mathf.Sin(t*2740*Mathf.PI*2)*Mathf.Exp(-t*9)*.18f+Mathf.Sin(t*4120*Mathf.PI*2)*Mathf.Exp(-t*14)*.08f);
             thud=Tone("Body land",3200,t=>Mathf.Sin(t*52*Mathf.PI*2)*Mathf.Exp(-t*8)*.7f+Mathf.Sin(t*18*Mathf.PI*2)*Mathf.Exp(-t*11)*.18f);
         }
         static AudioClip Tone(string name,int samples,System.Func<float,float> wave)
