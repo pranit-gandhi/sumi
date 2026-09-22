@@ -75,6 +75,7 @@ namespace Sumi
         const string PauseLine="T H E   C O U R T   H O L D S   I T S   B R E A T H";
         const string ChoosePrompt="C H O O S E   O N E   S T R O K E";
         const string DeathLine="T H E   I N K   T A K E S   Y O U";
+        const string VictoryLine="T H E   C O U R T   I S   Q U I E T";
         const string ControlsLine="C O N T R O L S";
         const string AboutLine="A B O U T";
         const string CombosLine="C O M B O S";
@@ -125,7 +126,6 @@ namespace Sumi
             if(player&&player.combat!=null){float target=Mathf.Clamp01(player.combat.health/player.combat.maxHealth);float dt=Time.unscaledDeltaTime;if(target<lastHealth-.001f)trailDelay=Time.unscaledTime+.27f;lastHealth=target;if(target<shownHealth)shownHealth=Mathf.SmoothDamp(shownHealth,target,ref healthVelocity,.17f,Mathf.Infinity,dt);else shownHealth=Mathf.MoveTowards(shownHealth,target,dt*.75f);if(trailHealth<target)trailHealth=Mathf.MoveTowards(trailHealth,target,dt*.75f);else if(Time.unscaledTime>trailDelay)trailHealth=Mathf.SmoothDamp(trailHealth,target,ref trailVelocity,.56f,Mathf.Infinity,dt);}
             if(Time.unscaledTime>=nextColorUpdate){nextColorUpdate=Time.unscaledTime+.05f;ApplyColor();}
             var k=Keyboard.current;
-            if(state==SumiRunState.Victory&&k!=null&&k.rKey.wasPressedThisFrame){Restart();return;}
             if(state==SumiRunState.Death)
             {
                 bool skip=k!=null&&(k.rKey.wasPressedThisFrame||k.spaceKey.wasPressedThisFrame||k.enterKey.wasPressedThisFrame);
@@ -350,7 +350,7 @@ namespace Sumi
                 GUI.Label(new Rect(w*.25f,h*.735f,w*.5f,30),attacker.CurrentAttack.unblockable?"CRIMSON SWEEP  —  EVADE":attacker.Braced?"BRACED  —  HEAVY / DEFLECT":attacker.CurrentAttack.name,small);
             if(state==SumiRunState.Upgrade)DrawSpellWheel(w,h);
             if(state==SumiRunState.Death)DrawDeathMenu(w,h);
-            else if(state==SumiRunState.Victory){GUI.Label(new Rect(w*.2f,h*.58f,w*.6f,50),"THE COURT IS QUIET",center);if(GUI.Button(new Rect(w*.39f,h*.69f,w*.22f,48),"R  —  RISE AGAIN",card))Restart();}
+            else if(state==SumiRunState.Victory)DrawVictoryMenu(w,h);
             if(controlsOpen)DrawControls(w,h);
             else if(combosOpen)DrawCombos(w,h);
             else if(aboutOpen)DrawAbout(w,h);
@@ -388,6 +388,22 @@ namespace Sumi
             if(PauseChoice(new Rect(ix,iy+gap*4f,iw,ih),"MAIN MENU"))ReturnToTitle();
             float sig=Mathf.Max(22,h*.032f);
             Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.88f,sig,sig),new Color(.72f,.055f,.075f,.78f));
+            GUI.color=old;
+        }
+        void DrawVictoryMenu(float w,float h)
+        {
+            Color old=GUI.color;
+            GUI.color=new Color(.010f,.010f,.012f,.58f);GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+            Tex(vignetteTexture,new Rect(0,0,w,h),new Color(.008f,.008f,.009f,.72f));
+            float lineY=h*.26f;
+            GUI.color=old;
+            GUI.Label(new Rect(w*.06f,lineY,w*.88f,56),VictoryLine,menuItemLit??menuItem??pauseNote??GUI.skin.label);
+            InkRule(w*.28f,lineY+72,w*.44f,2.4f,new Color(.86f,.82f,.72f,.42f));
+            InkRule(w*.36f,lineY+78,w*.28f,1.4f,new Color(.70f,.050f,.070f,.55f));
+            float iw=Mathf.Clamp(w*.42f,320,560),ih=Mathf.Max(48,h*.065f),ix=(w-iw)*.5f,iy=h*.48f;
+            if(PauseChoice(new Rect(ix,iy,iw,ih),"MAIN MENU"))ReturnToTitle();
+            float sig=Mathf.Max(24,h*.036f);
+            Tex(sealTexture,new Rect(w*.5f-sig*.5f,h*.86f,sig,sig),new Color(.72f,.055f,.075f,.90f));
             GUI.color=old;
         }
         void DrawDeathMenu(float w,float h)
