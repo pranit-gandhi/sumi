@@ -6,8 +6,8 @@ namespace Sumi
 {
     public enum SumiVolleyState { Telegraph,Falling,Fade }
 
-    // One warned circle, then a staggered fall of decorative shafts. Damage is a single occupancy
-    // test against that circle between the first and last landing, not a per-arrow hitbox.
+    // One warned circle, then a staggered fall of decorative shafts. While shafts are landing,
+    // standing inside the circle ticks damage on a dwell interval instead of a single occupancy hit.
     public sealed class SumiArrowStrike:MonoBehaviour
     {
         struct Shaft
@@ -25,7 +25,7 @@ namespace Sumi
         readonly List<Vector3> landings=new List<Vector3>(32);
         LineRenderer ring;MeshRenderer fillRenderer;Mesh discMesh,arrowMesh;Material ringMaterial,fillMaterial,arrowMaterial;
         Matrix4x4[] arrowMatrices;
-        Vector3 center;float radius,age,fill,fade=1;bool damaged;
+        Vector3 center;float radius,age,fill,fade=1,nextTickAt=-1;
         AudioSource rainVoice;bool rainStarted,voicesPaused;
         const int RingPoints=64;
 
@@ -123,8 +123,18 @@ namespace Sumi
             fade=State==SumiVolleyState.Fade?1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(last,last+tuning.fadeDuration,age)):1;
             TickAudio(telegraph,last);
             DrawMarkings();DrawShafts();
-            if(age>=first&&age<=last&&!damaged&&InsideCircle())Hit();
+            TickDwellDamage(first,last);
             if(age>=last+tuning.fadeDuration)Destroy(gameObject);
+        }
+
+        void TickDwellDamage(float first,float last)
+        {
+            if(age<first||age>last||!player||!player.combat){nextTickAt=-1;return;}
+            if(!InsideCircle()){nextTickAt=-1;return;}
+            if(nextTickAt<0)nextTickAt=age;
+            if(age<nextTickAt)return;
+            player.combat.ReceiveWorldTick(tuning.damage,center+Vector3.up);
+            nextTickAt=age+Mathf.Max(.5f,tuning.dwellInterval);
         }
 
         void DrawMarkings()
@@ -178,11 +188,6 @@ namespace Sumi
         bool InsideCircle()
         {
             Vector3 d=player.transform.position-center;d.y=0;return d.sqrMagnitude<=radius*radius;
-        }
-        void Hit()
-        {
-            damaged=true;
-            player.combat.ReceiveWorldHit(tuning.damage,center);
         }
 
         static Vector3 Ground(Vector3 point)

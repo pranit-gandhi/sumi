@@ -54,6 +54,12 @@ namespace Sumi
         {
             if(!enemy||enemy.GetComponent<SumiDeathActor>())return;
             Impact(hit,false);
+            // Weighty kills get a short tableau after hitstop; light cuts stay crisp.
+            if(hit.isBoss||hit.wasCritical)
+            {
+                var feel=Feel;
+                SumiTime.SlowMotion(feel.enemyDeathSlowmo*(hit.isBoss?.88f:1f),feel.enemyDeathSlowmoHold*(hit.isBoss?1.25f:1f),feel.enemyDeathSlowmoFade);
+            }
             var actor=enemy.gameObject.AddComponent<SumiDeathActor>();
             actor.Begin(hit,enemy,null);
         }

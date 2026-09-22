@@ -13,7 +13,8 @@ namespace Sumi
         [Min(.5f)] public float fallStagger=2.5f;
         [Min(0)] public float fadeDuration=1.5f;
         [Range(8,48)] public int arrowCount=28;
-        [Min(0)] public float damage=10f;
+        [Min(0)] public float damage=8f;
+        [Min(.5f)] public float dwellInterval=1.5f;
         [Min(8)] public float spawnHeight=26f;
         [Min(0)] public float centerOffset=2.2f;
         [Min(0)] public float cameraLift=2.6f;
@@ -45,6 +46,12 @@ namespace Sumi
         [Range(.05f,1)] public float playerDeathSlowmo=.46f;
         [Min(0)] public float playerSlowmoHold=.24f;
         [Min(0)] public float playerSlowmoFade=.52f;
+        [Range(.05f,1)] public float enemyDeathSlowmo=.48f;
+        [Min(0)] public float enemyDeathSlowmoHold=.14f;
+        [Min(0)] public float enemyDeathSlowmoFade=.32f;
+        [Range(.05f,1)] public float parrySlowmo=.58f;
+        [Min(0)] public float parrySlowmoHold=.05f;
+        [Min(0)] public float parrySlowmoFade=.16f;
         [Header("Body")]
         [Min(0)] public float deathPoseHold=.12f;
         [Min(0)] public float playerRealization=.34f;

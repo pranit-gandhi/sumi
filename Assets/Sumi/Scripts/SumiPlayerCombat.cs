@@ -321,6 +321,21 @@ namespace Sumi
             Vector3 dir=transform.position+Vector3.up-contact;if(dir.sqrMagnitude<.001f)dir=-transform.forward;
             Damage(damage,.22f,contact,dir.normalized,contact,SumiSwordArc.Descending);
         }
+        // Sustained hazards (arrow rain) chip without locking the player in hitstun each tick.
+        public void ReceiveWorldTick(float damage,Vector3 contact)
+        {
+            if(state==SumiCombatState.Dead||Invulnerable||damage<=0)return;
+            Vector3 dir=transform.position+Vector3.up-contact;if(dir.sqrMagnitude<.001f)dir=-transform.forward;dir.Normalize();
+            SumiCombatFeedback.ContactDust(contact,dir,true);
+            if(steadyHeart)damage*=.8f;
+            health=Mathf.Max(0,health-damage);damageGraceUntil=Time.time+.18f;
+            if(health<=0)
+            {
+                Enter(SumiCombatState.Dead,"Hit",.04f);
+                SumiDeath.BeginPlayer(player,SumiFatalHit.Make(transform,contact,contact,dir,dir,damage,SumiHitKind.ShoulderCut,SumiSwordArc.Descending,true,false,false));
+            }
+            NotifyDamage(contact,dir,contact);
+        }
         void Damage(float damage,float stun,Vector3 contact,Vector3 direction,Vector3 attacker,SumiSwordArc arc=SumiSwordArc.Descending)
         {
             if(damage>0)SumiCombatFeedback.ContactDust(contact,direction,true);

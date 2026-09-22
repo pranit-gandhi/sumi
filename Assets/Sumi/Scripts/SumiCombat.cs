@@ -103,7 +103,12 @@ namespace Sumi
         }
         public static void Block(Vector3 at){Freeze(.025f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.14f);Mark(at,false,false);}
         public static void ParryReady(Vector3 at,Vector3 axis){if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.11f,axis);Mark(at,false,true,axis);}
-        public static void Parry(Vector3 at,Vector3 axis){Freeze(.085f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.46f,axis);Mark(at,true,true,axis);}
+        public static void Parry(Vector3 at,Vector3 axis)
+        {
+            Freeze(.085f);Play(2);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick(.46f,axis);Mark(at,true,true,axis);
+            var feel=SumiDeath.Feel;
+            SumiTime.SlowMotion(feel.parrySlowmo,feel.parrySlowmoHold,feel.parrySlowmoFade);
+        }
         public static void WaistCut(SumiEnemy enemy,Vector3 at){Mark(new Vector3(enemy.transform.position.x,enemy.transform.position.y+.94f,enemy.transform.position.z),true,false,enemy.transform.right);}
         public static void PlayContact(bool heavy){EnsureAudio();Play(heavy?4:1);}
         public static void Swing(bool fast,Vector3 direction=default,int comboStep=0){Play(fast?3:0);if(SumiGame.I&&SumiGame.I.view)SumiGame.I.view.Kick((fast?.20f:.13f)*ComboShakeScale(comboStep),direction);}
