@@ -1,4 +1,4 @@
-<img src="docs/images/banner.png" alt="Sumi promotional artwork" width="100%">
+<img src="docs/images/banner.png" alt="Sumi cover art" width="100%">
 
 # Sumi
 
@@ -58,4 +58,4 @@ Create a branch from `main` when collaborating, and commit Unity assets together
 
 Co-developed by **Pranit Singh Gandhi** and **Naxin Chen**.
 
-See [ATTRIBUTIONS.md](ATTRIBUTIONS.md) for asset sources and license terms. Promotional artwork is shown above; the gallery contains in-game screenshots.
+See [ATTRIBUTIONS.md](ATTRIBUTIONS.md) for asset sources and license terms. The cover art is shown above; the gallery contains in-game screenshots.
