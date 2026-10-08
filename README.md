@@ -1,61 +1,61 @@
+<img src="docs/images/banner.png" alt="Sumi promotional artwork" width="100%">
+
 # Sumi
 
-Sumi is a Unity 6 third-person katana roguelite slice presented as a living monochrome ink drawing. A wandering ronin survives two arena waves, chooses two spells, and confronts a Painted Oni. Health is the only player resource.
+**Roguelite · A ronin's last chance.**
+
+A ronin falls in battle. Death offers him one final chance to return. Caught between life and death, he must fight his way through the ink.
+
+[Play in your browser](https://pranit-gandhi.itch.io/sumi)
+
+## The game
+
+Third-person katana combat in an ink-inspired shrine. Chain cuts, time a perfect parry, and dash through danger. Survive the arena waves, choose spells that change your run, and confront the Painted Oni.
+
+- A three-hit sword combo, heavy attacks, guard, and timed deflections.
+- Brush Flash movement, target locking, shuriken, and low-health executions.
+- Randomized spell choices, arrow hazards, and distinct enemy attack patterns.
+- Ink dissolution, brushwork menus, and a restrained red and sepia palette.
+
+## In-game screenshots
+
+<img src="docs/images/combat.png" alt="Katana combat and an arrow hazard in Sumi's shrine arena" width="100%">
+
+<img src="docs/images/spells.png" alt="Three spell cards offering different upgrades for the run" width="100%">
 
 ## Controls
 
-- `WASD`: move
-- `Shift`: jog
-- Mouse: camera
-- Left Mouse: buffered descending cut, return cut, sweeping finisher
-- `R` or Middle Mouse: overhead heavy; branch into it from either opening light cut
-- Right Mouse: hold guard
-- `Q`: dedicated timed parry; press just before contact for a perfect deflection
-- `Space`: buffered Brush Flash; cancel earlier after a confirmed hit
-- `Tab`: toggle target lock
-- `E`: finish a nearby enemy at 35% health or less (12% for the Oni)
-- `F`: perform a drawn-out shuriken throw (3.5-second cooldown)
-- `F3`: toggle combat timing debug overlay
-- `Esc`: pause
-- `R`: restart after victory or death
+- **WASD** to move; **Shift** to jog.
+- **Mouse** to look; **Left Mouse** to chain cuts.
+- **R / Middle Mouse** for a heavy attack.
+- **Right Mouse** to guard; **Q** to parry.
+- **Space** to dash; **Tab** to toggle target lock.
+- **E** to execute; **F** to throw a shuriken.
+- **Esc** to pause.
 
-## Play in Unity
+## Development
 
-1. Open this folder in Unity 6000.2.14f1.
+Built with **Unity 6000.2.14f1**, **C#**, and **Universal Render Pipeline 17.2.0**. The browser version uses WebGL.
+
+1. Open the repository in Unity 6000.2.14f1.
 2. Open `Assets/Scenes/SumiShrine.unity`.
 3. Enter Play Mode.
 
-The project uses URP 17.2.0. The run includes two randomized three-choice spell wheels, telegraphed arrow hazards, health and shuriken upgrades, a three-hit sword combo, low-health executions, an Oni boss, pause, death, victory and restart.
+Combat tuning lives in `Assets/Sumi/Resources/Sumi/Attacks/`. See [COMBAT.md](COMBAT.md) for move timing, follow-ups, and combat checks.
 
-The run plays the supplied `Samurai.mp3` as looping background music and uses recorded sword swings, impacts, and parries. Music pauses with the pause screen.
-
-## Collaborating
-
-Create a branch from `main` for each change and open `Assets/Scenes/SumiShrine.unity` for gameplay work. Commit `Assets` together with their `.meta` files, plus intentional changes under `Packages` and `ProjectSettings`. Unity-generated `Library`, `Temp`, `Logs`, `UserSettings`, local review captures and release builds are excluded by `.gitignore` and should remain local.
-
-Before opening a gameplay PR, enter Play Mode from `SumiShrine`, exercise the changed combat or run flow, and confirm the Console has no new errors. Keep the project on Unity 6000.2.14f1 and URP 17.2.0 so serialized scenes and imported assets remain stable between teammates.
-
-## Build and package WebGL
-
-With Unity open at the project root:
+With Unity open at the project root, build and package the browser version:
 
 ```powershell
 python Tools/editor.py SumiBuild.WebGL
 python Tools/package_itch.py
 ```
 
-The build is written to `Builds/WebGL`. The itch.io upload is `Builds/Sumi-itch.zip`, with `index.html` at the archive root. The current release loaded successfully through local HTTP in headless Chrome and passed the itch archive checks.
+The build is written to `Builds/WebGL`; the upload package is `Builds/Sumi-itch.zip`. Local builds and Unity-generated folders are excluded from source control. Rebuild to distribute changes made after the last browser release.
 
-See `PROGRESS.md` for the recorded release results and package facts, and `ATTRIBUTIONS.md` for asset licenses.
+Create a branch from `main` when collaborating, and commit Unity assets together with their `.meta` files. Exercise changed gameplay in Play Mode and check the Console before opening a gameplay PR. `SumiHumanoidBuild.Build` recreates an older outfit; use `SumiCharacterArt.Apply` only when intentionally regenerating the current character art.
 
-## Known limitation
+## Credits
 
-The release passed state, motion, browser and archive checks before the disposable verification utilities were removed from the shareable repository. Final combat difficulty and timing remain subjective and should receive one human balance playthrough before publishing.
+Co-developed by **Pranit Singh Gandhi** and **Naxin Chen**.
 
-Do not run `SumiHumanoidBuild.Build`; it recreates an older outfit. Use `SumiCharacterArt.Apply` only when intentionally regenerating the current character art.
-
-## Sword combat tuning
-
-Moves live in `Assets/Sumi/Resources/Sumi/Attacks/`. Each asset controls timing in seconds, damage, footwork, legal follow-ups and impact feedback. See [COMBAT.md](COMBAT.md) for the design, controls and repeatable Play Mode checks. Existing WebGL packages predate this combat update; build again to distribute it.
-
-Enemies now use distinct patterns: Retainers chain cuts, Shades lunge and retreat, and the Oni alternates cuts, delayed slams and crimson sweeps before awakening into a second phase. Gold warnings indicate braced attacks: use a heavy cut during their windup or perfectly deflect their strike. Crimson sweeps require Brush Flash or moving out of reach. Held guard mitigates damage without staggering enemies. The next opponent can prepare during another's recovery, while arrow hazards take a separate turn in the group attack budget.
+See [ATTRIBUTIONS.md](ATTRIBUTIONS.md) for asset sources and license terms. Promotional artwork is shown above; the gallery contains in-game screenshots.
